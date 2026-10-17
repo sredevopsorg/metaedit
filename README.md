@@ -14,7 +14,8 @@ metadata — not a sync service and not a plugin.
 ## What it does
 
 - **Browse and search your library.** Artists, albums or songs, with a filter for
-  items that are missing metadata.
+  items that are missing metadata, and narrowing by artist, album or exclusion
+  patterns.
 - **Fetch metadata from Last.fm.** Genres and styles, tag popularity, album
   overviews, and similar artists — every response stored locally as it arrives.
 - **Review a field-by-field diff before anything changes.** Nothing is written until
@@ -24,6 +25,8 @@ metadata — not a sync service and not a plugin.
   previous values.
 - **Edit in bulk.** Review a whole selection, apply it, watch per-item progress, and
   revert the batch as a single unit.
+- **Harvest in bulk.** Fetch and archive Last.fm data for a whole selection in one
+  streamed run, without writing anything to Jellyfin.
 - **Explore the archive offline.** Search everything ever fetched from Last.fm, with
   tag popularity and similar artists, without touching the network.
 
@@ -49,12 +52,15 @@ Two more things are deliberate, not missing:
 
 ## Quickstart
 
-You need Docker with Compose, a Jellyfin server, and a Last.fm API key.
+You need [Docker](https://docs.docker.com/get-docker/) with Compose, a Jellyfin
+server, and a Last.fm API key:
 
-1. **A Jellyfin administrator API key** — Dashboard → API Keys. Metadata writes are
-   gated on the `RequiresElevation` policy, so a non-admin key can browse but not save;
-   `GET /api/info` tells you which one you have.
-2. **A Last.fm API key** — from <https://www.last.fm/api/account/create>.
+| Requirement | Details |
+|---|---|
+| **Jellyfin ≥ 10.9** | The item-update semantics the write path depends on. |
+| **Jellyfin administrator API key** | Dashboard → API Keys. Metadata writes are gated on the `RequiresElevation` policy, so a non-admin key can browse but not save; `GET /api/info` tells you which one you have. |
+| **Last.fm API key** | From <https://www.last.fm/api/account/create>. Read-only usage — no user auth. |
+| **Postgres 18** | Runs in the compose stack; required for the archive's declarative monthly partitioning. |
 
 ```bash
 git clone https://github.com/sredevopsorg/metaedit.git
@@ -68,27 +74,30 @@ docker compose up -d --build
 
 Then open <http://127.0.0.1:8080>.
 
+> **The app binds to `127.0.0.1` on purpose.** It holds an administrator Jellyfin key
+> and has no authentication of its own. Put an authenticating proxy in front of it
+> before exposing it anywhere.
+
 The stack runs Postgres, applies migrations as a one-shot `migrate` service, and only
 then starts the app. The first visit is the Library screen: search for something, open
 an item, fetch its Last.fm candidates, and review the diff.
 
-> **It binds to `127.0.0.1` on purpose.** The app holds an administrator Jellyfin key
-> and has no authentication of its own. Put an authenticating proxy in front of it
-> before exposing it anywhere.
-
-Postgres 18 is required: the archive uses declarative monthly partitioning. Jellyfin
-10.9 or newer is required for the item-update semantics the write path depends on.
+Every knob the app reads is listed with its default in the
+[configuration reference](docs/configuration.md); `.env.example` is the template to copy
+and the reference is the complete list.
 
 ## Documentation
 
 | Doc | For |
 |---|---|
+| [Configuration](docs/configuration.md) | Every environment variable, its default, and what it changes |
 | [Development](docs/development.md) | Running from a checkout, checks, tests, the API contract |
 | [API](docs/api.md) | Every endpoint, and the rules the write path follows |
 | [Operations](docs/operations.md) | The archive, the CLI, retention, live-verified server behaviour |
 | [Architecture](docs/architecture.md) | Status, the UI, layering, known deviations |
 | [ADRs](docs/adr/README.md) | Why the design is what it is |
 | [Design notes](docs/design/README.md) | Implementation contracts fixed ahead of a phase |
+| [Changelog](CHANGELOG.md) | What changed, release by release |
 
 ## Attribution
 

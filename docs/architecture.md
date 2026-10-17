@@ -14,6 +14,7 @@ For the reasoning behind a decision, read the ADR it names rather than this page
 | Jellyfin read: libraries, browse, batch item state, full write whitelist | **done** |
 | Last.fm client: typed models, shared rate limiter, backoff, archive-first reads | **done** |
 | Archive writes: append-only request log, content-addressed bodies, cap policy | **done** |
+| Harvest: fetch and archive for one item or a whole selection (SSE) | **done** |
 | Derivation into entity/tag/similarity tables, `reindex` | **done** |
 | Tag policy, mapping, confidence, diff | **done** |
 | Apply, snapshot, undo | **done** |
@@ -72,6 +73,7 @@ app calling the Jellyfin REST API, not a plugin) and
   of a phase: exactly what the code must do, where an ADR records only why.
 - [`docs/api.md`](api.md) — endpoint reference and the write-safety rules.
 - [`docs/operations.md`](operations.md) — the archive, the CLI, retention.
+- [`docs/configuration.md`](configuration.md) — every environment variable and its default.
 - [`docs/development.md`](development.md) — checkout setup, checks, tests.
 
 ## Attribution

@@ -12,6 +12,7 @@ src/metaedit/
   adapters/       jellyfin/ and lastfm/ HTTP clients
   archive/        archive writes, derivation, reindex, byte accounting
   db/             SQLAlchemy models, sessions, partition management
+  service/        orchestration the routers call: apply, bulk, harvest, selection
   api/            FastAPI routers
 apps/web/         React + TypeScript SPA
 contracts/        vendored Jellyfin OpenAPI spec (pinned, asserted in tests)
@@ -52,7 +53,10 @@ process:
 ```bash
 cd apps/web
 pnpm install
-pnpm dev          # http://127.0.0.1:5173
+pnpm dev          # http://127.0.0.1:5173 — Vite dev server, proxies /api to FastAPI
+pnpm typecheck    # tsc over app, test and e2e configs
+pnpm test         # SPA unit tests (node --experimental-strip-types runner)
+pnpm build        # typecheck + unit tests + vite build — what CI runs
 ```
 
 In a sandboxed environment pnpm may be unable to write its operation lock outside
@@ -86,8 +90,9 @@ Integration tests need a reachable Postgres 18. Each test gets a disposable
 database of its own, cloned from a template that is migrated once per session, so
 the migration chain runs once instead of once per test. They never touch the data
 in `metaedit` itself: the template and the per-test copies are created and
-dropped by the suite. Point it at another server with
-`METAEDIT_TEST_DATABASE_URL` (default
+dropped by the suite. When no Postgres answers they **skip cleanly** — an ordinary
+`uv run pytest` on a fresh checkout reports skips, not failures. Point them at
+another server with `METAEDIT_TEST_DATABASE_URL` (default
 `postgresql+psycopg://metaedit:metaedit@localhost:5432/metaedit`).
 
 ### Live tests

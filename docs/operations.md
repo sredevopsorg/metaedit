@@ -1,7 +1,9 @@
 # Operations
 
 Running `metaedit` day to day: what the archive stores, the CLI that tends it, and
-what was learned by pointing it at real servers.
+what was learned by pointing it at real servers. Every environment variable the
+stack reads — including the archive and rate-limit knobs summarised here — is listed
+with its default in the [configuration reference](configuration.md).
 
 ## The archive
 
@@ -139,6 +141,14 @@ each one is a trap that a future change could walk back into:
 - The app port is bound to `127.0.0.1` by default: it holds an administrator Jellyfin
   key and has no authentication of its own. Put an authenticating proxy in front of it
   before exposing it anywhere.
+- The Last.fm client rate-limits itself (`LASTFM_MAX_RPS`, default 4 requests/second,
+  with a `LASTFM_BURST` allowance of 8), because it is a shared third-party service
+  with published limits. Our own API is deliberately not rate-limited: the expensive
+  operations are operator-triggered and already bounded.
+- `JELLYFIN_USER_ID` pins which Jellyfin user context the app reads single items
+  under. An API key is userless and Jellyfin's single-item endpoint needs a user, so
+  when it is empty the app discovers one — the first administrator in sorted-id order,
+  cached per process. Set it on a server where "first" is not the right choice.
 - `ARCHIVE_ENABLED=false` stops recording to the archive and skips partition
   maintenance at startup. Everything that reads the archive then has nothing to read,
   so the editor finds no candidates and `reindex` has nothing to derive from. It exists
