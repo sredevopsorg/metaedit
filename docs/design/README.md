@@ -7,4 +7,4 @@ rules.
 
 | Doc | Covers | Status |
 |---|---|---|
-| [Phase 3: derivation and reindex](0003-derivation-and-reindex.md) | Identity rules, field selection, tag edges, staging swap, acceptance criteria | Specification — not implemented |
+| [Phase 3: derivation and reindex](0003-derivation-and-reindex.md) | Identity rules, field selection, tag edges, staging swap, acceptance criteria | Implemented — shipped as `metaedit reindex` |

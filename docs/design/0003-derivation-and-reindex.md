@@ -1,6 +1,8 @@
 # Phase 3 design: derivation and `reindex`
 
-- **Status:** Specification — not yet implemented (`metaedit reindex` raises `NotImplementedError`)
+- **Status:** Implemented — shipped as `metaedit reindex`; day-to-day use is documented
+  in [operations](../operations.md#cli). This document remains the contract the
+  implementation must keep satisfying, including the recorded `--since` deviation (§7).
 - **Implements:** ADR 0009 (raw archive is the source of truth), ADR 0010 (content addressing)
 - **Depends on:** the raw layer and `ArchiveStore` from phase 2
 

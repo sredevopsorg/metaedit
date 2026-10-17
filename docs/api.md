@@ -84,6 +84,27 @@ Semantics worth stating, all verified against Jellyfin 12.2.0:
 | `POST /api/bulk/{batch_id}/revert` | **SSE.** Undo a whole batch. Requires `confirm=true`. |
 | `GET /api/bulk/jobs` | Reviewed diffs still available to apply. |
 
+## Harvest
+
+Harvesting is the read-only way to fill the archive: it spends Last.fm requests and
+writes to the archive, but **never writes to Jellyfin**.
+
+| Endpoint | Meaning |
+|---|---|
+| `POST /api/items/{item_id}/harvest` | Fetch and archive Last.fm data for one item. Rebuilds the derived layer so the result is immediately usable. |
+| `POST /api/harvest` | **SSE.** The same for a whole selection, streaming one event per item. |
+
+- A miss is a **reported outcome with search alternatives**, not an error status —
+  on a large library most misses are obscure and the alternatives are the useful part.
+- `search_fallback` (default on) retries a miss through Last.fm search rather than
+  giving up on the exact name.
+- The batch variant accepts the same three narrowings as every other selection
+  (`artist_ids`, `album_ids`, `exclude`), so one selection means one thing across the app.
+- The batch variant's `reindex` runs **once at the end** rather than per item, because
+  it is a pass over the whole raw layer; inside the loop it would make a batch
+  quadratic. It defaults to on, because a harvest whose results cannot resolve as
+  candidates is not finished work.
+
 ## Genre blacklist and removal
 
 | Endpoint | Meaning |
@@ -144,12 +165,13 @@ Four properties hold on every write, and each is tested:
 default — which is empty for any match that needs review, so an unreviewed match
 writes nothing at all.
 
-## Bulk editing
+## How bulk stays safe
 
 Bulk extends the same model, because a mapping mistake at this scale is a
 library-wide event rather than a curiosity. `POST /api/bulk/diff` streams a per-item
 diff and returns a `job_id`; `POST /api/bulk/apply` requires that job id, so an apply
-is never the first request of a session.
+is never the first request of a session. The genre-removal pair follows the same
+shape, and a removal reuses `POST /api/bulk/{batch_id}/revert`.
 
 - **Only pre-selected fields are written.** A field is pre-selected only when the
   match was confident enough to act on *unreviewed*. An item with no trustworthy
