@@ -9,6 +9,44 @@ The version is `0.x`, which by SemVer means the interface may still change betwe
 releases. The metadata *contract* is the exception: what is written to Jellyfin is
 specified by ADRs 0003, 0004 and 0007 and those guarantees are treated as stable.
 
+## [0.2.1] - 2026-10-17
+
+### Added
+
+**A configuration reference.** [`docs/configuration.md`](docs/configuration.md) lists every
+environment variable the stack reads, with its default and what it changes — including the
+ones that were documented nowhere before: the Last.fm rate limiter (`LASTFM_MAX_RPS`,
+`LASTFM_BURST`), `JELLYFIN_USER_ID`, `ARCHIVE_SIMILAR_FRESHNESS_TTL_S` and
+`METAEDIT_BROWSE_SCAN_CAP`. Every row was verified against `config.py`, the compose file
+and the test conftest rather than written from memory, because a configuration table that
+has drifted is worse than none: it gets trusted and copied.
+
+**The harvest endpoints in the API reference.** `POST /api/items/{id}/harvest` and the
+batch `POST /api/harvest` were implemented and mounted but absent from `docs/api.md`,
+which claimed to list "every endpoint". The new section states the load-bearing rule:
+harvest spends Last.fm requests and writes to the archive, but never writes to Jellyfin.
+
+### Changed
+
+**README and docs enrichment.** The quickstart's requirements are a table; the feature
+list covers narrowing and bulk harvest; the documentation index gains Configuration and
+Changelog rows. `docs/development.md` lists the `service/` package the layout section had
+omitted, documents all four `pnpm` scripts, and notes that integration tests skip
+cleanly when no Postgres answers — an ordinary `uv run pytest` on a fresh checkout
+reports skips, not failures. `docs/operations.md` documents the rate limiter and the
+user-context knob.
+
+**Stale design status corrected.** The phase-3 design doc still said
+"`metaedit reindex` raises `NotImplementedError`" while reindex has been shipped since
+0.1.0 — the kind of sentence a reader cannot distrust, because it sounds like the
+authoritative status. Both the design index and the doc header now say implemented,
+with the document retained as the contract the implementation must keep satisfying.
+
+**Version bumped to 0.2.1** across `pyproject.toml`, the package, the OpenAPI
+`info.version` (contract regenerated), the Jellyfin client identity, and the Last.fm
+user agent — whose compose default said `metaedit/0.1.0` while the app default said
+`0.2.0`; both now agree.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added
