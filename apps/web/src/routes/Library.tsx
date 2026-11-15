@@ -243,14 +243,25 @@ export function Library() {
   }
 
   function toggleAspect(aspect: string) {
-    const next = aspects.includes(aspect)
-      ? aspects.filter((entry) => entry !== aspect)
-      : [...aspects, aspect]
-    const merged = new URLSearchParams(params)
-    merged.delete('missing')
-    merged.delete('start')
-    for (const entry of next) merged.append('missing', entry)
-    setParams(merged)
+    // Derived from the params handed to the updater, not from the `aspects` of the render
+    // that created this handler. A toggle is a read-modify-write of the URL, and reading a
+    // render-time snapshot makes two toggles that land before the URL round-trips write the
+    // same base: the second undoes the first. That showed up as a flaky `checkbox.check()`
+    // in the e2e suite, which asserts the box ends up checked -- it did get clicked, but the
+    // state had been reset out from under it.
+    setParams((current) => {
+      const selected = current
+        .getAll('missing')
+        .filter((entry) => ASPECTS_BY_KIND[kind].some((option) => option.value === entry))
+      const next = selected.includes(aspect)
+        ? selected.filter((entry) => entry !== aspect)
+        : [...selected, aspect]
+      const merged = new URLSearchParams(current)
+      merged.delete('missing')
+      merged.delete('start')
+      for (const entry of next) merged.append('missing', entry)
+      return merged
+    })
   }
 
   function toggle(itemId: string) {
