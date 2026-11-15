@@ -9,7 +9,7 @@ The version is `0.x`, which by SemVer means the interface may still change betwe
 releases. The metadata *contract* is the exception: what is written to Jellyfin is
 specified by ADRs 0003, 0004 and 0007 and those guarantees are treated as stable.
 
-## [Unreleased]
+## [0.2.2] - 2026-11-15
 
 ### Security
 
