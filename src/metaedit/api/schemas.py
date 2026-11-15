@@ -453,6 +453,218 @@ class BulkJobListResponse(BaseModel):
     count: int
 
 
+# --------------------------------------------------- clearing every tag, with exceptions
+
+
+class ClearOutcomeView(BaseModel):
+    """What clearing one field of one item would leave.
+
+    Mirrors ``domain.genre_removal.ClearOutcome.as_dict()``. A sibling of
+    ``RemovalOutcomeView`` rather than a reuse: there is no single ``target`` when the target
+    is *everything*, and the fact worth reporting instead is which exceptions survived and
+    whether the field would be left empty -- which is the whole reason this operation needs a
+    review step at all.
+    """
+
+    field: str
+    before: list[str]
+    after: list[str]
+    removed: list[str]
+    changed: bool
+    # True when the field would be left with nothing. The intended outcome of "clear every
+    # tag" and still worth stating, because it is the largest edit the application offers.
+    emptied: bool
+    # The keep-list keys this removal was built with, so a preview frame explains itself.
+    exceptions: list[str]
+
+
+class ClearItemEvent(BulkItemEvent):
+    """One item in a clear diff, carrying the per-field outcomes.
+
+    Extends ``BulkItemEvent`` so the ``diff`` the review UI already renders keeps one
+    definition, and reuses the ``removals`` key so one client handles both removal features.
+    """
+
+    removals: list[ClearOutcomeView] = Field(default_factory=list)
+
+
+class ClearSummaryEvent(BulkSummaryEvent):
+    """The closing frame of a clear run, which knows what it kept and what it would empty.
+
+    ``unmatched_exceptions`` is not decoration. Matching is exact (ADR 0015), so a misspelt
+    exception keeps nothing and the operator would otherwise learn that after the write
+    rather than before it.
+    """
+
+    clearing: list[str] = Field(default_factory=list)
+    keeping: list[str] = Field(default_factory=list)
+    unmatched_exceptions: list[str] = Field(default_factory=list)
+    # How many stored values the run would delete across every item, not just how many items
+    # it touches.
+    removed_values: int = 0
+    emptied: list[EmptiedField] = Field(default_factory=list)
+
+
+# A discriminated union over the frames a clear stream can emit. Separate from
+# ``RemovalStreamEvent`` because the summary carries ``unmatched_exceptions`` and
+# ``removed_values``; documenting it as a removal stream would describe the one thing an
+# operator must see before confirming as absent.
+RemoveAllTagsStreamEvent = Annotated[
+    ClearItemEvent
+    | BulkAppliedEvent
+    | BulkFailedEvent
+    | BulkRevertedEvent
+    | ClearSummaryEvent
+    | BulkErrorEvent,
+    Field(discriminator="type"),
+]
+
+
+class ClearJobSummary(RemovalJobSummary):
+    """A reviewed clear, which knows the fields it clears and what it keeps."""
+
+    clearing: list[str] = Field(default_factory=list)
+    keeping: list[str] = Field(default_factory=list)
+    unmatched_exceptions: list[str] = Field(default_factory=list)
+    removed_values: int = 0
+
+
+class ClearJobListResponse(BaseModel):
+    jobs: list[ClearJobSummary]
+    count: int
+
+
+# ------------------------------------------------- genres merged by similarity
+
+
+class SpellingVariantView(BaseModel):
+    """One spelling of a genre, and how often the library uses it."""
+
+    value: str
+    count: int
+    # True when a value was supplied more than once. For an explicit list that is the
+    # caller weighting it; for a vocabulary it is a server quirk. Reported so the choice of
+    # representative is explainable rather than mysterious.
+    repeated: bool
+
+
+class SimilarityGroupView(BaseModel):
+    """Values a merge would collapse into one spelling.
+
+    ``merge`` is the ``{from: to}`` map a confirmation needs, computed once on the server so
+    a preview and an apply cannot disagree by recomputing it in two places.
+    """
+
+    field: str
+    # The separator-free comparison key the group was formed on. Retained because it is the
+    # *reason* the group exists, and an operator reviewing it should be able to see that the
+    # reason is a hyphen rather than a judgement about genres.
+    squashed: str
+    representative: str
+    total: int
+    variants: list[SpellingVariantView]
+    merge: dict[str, str]
+
+
+class SimilarityPreviewResponse(BaseModel):
+    """What a similarity pass found. **Writes nothing.**
+
+    ``truncated`` is a statement about the answer, not an implementation detail: a preview
+    that read only part of a library saw only part of its vocabulary, and ``groups`` is then
+    a lower bound. ``hints`` carries what the grouping refused to do -- an exception that
+    matched nothing, a value sitting beside a shorter word it contains -- because those are
+    the cases where silence would look like agreement.
+    """
+
+    source: str
+    distinct_values: int
+    scanned: int | None = None
+    truncated: bool = False
+    groups: list[SimilarityGroupView] = Field(default_factory=list)
+    withheld: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="groups the keep/exceptions narrowed away, with the reason",
+    )
+    hints: list[str] = Field(default_factory=list)
+
+
+class MergeRuleView(BaseModel):
+    """A confirmed group: every spelling becomes ``representative``."""
+
+    field: Literal["Genres", "Tags"]
+    representative: str
+    spellings: list[str]
+
+
+class MergeSelectionView(BaseModel):
+    """Which items a confirmed merge may write to."""
+
+    kind: str
+    parent_id: str | None
+    search: str | None
+    limit: int
+    artist_ids: list[str]
+    album_ids: list[str]
+    exclude: list[str]
+
+
+class MergeOutcomeView(BaseModel):
+    """One rewording of one field of one item.
+
+    Under the ``removals`` key of an item frame, because a merge and a removal answer the
+    same question -- "this value becomes that one" -- and one client should render both.
+    """
+
+    field: str
+    to: str | None
+    before: list[str]
+    after: list[str]
+    # Zero-based positions that changed, so a UI can highlight the rewording rather than
+    # diffing two arrays of strings.
+    changed: list[int]
+
+
+class MergeItemEvent(BulkItemEvent):
+    """One item in a merge diff, carrying the rewordings."""
+
+    removals: list[MergeOutcomeView] = Field(default_factory=list)
+    merge: dict[str, list[int]] = Field(
+        default_factory=dict,
+        description="per field, the positions that would be rewritten",
+    )
+
+
+class MergeSummaryEvent(BulkSummaryEvent):
+    """The closing frame of a merge run, which knows what it merges into what."""
+
+    merging: list[dict[str, Any]] = Field(default_factory=list)
+    rewritten_values: int = 0
+    emptied: list[EmptiedField] = Field(default_factory=list)
+
+
+MergeStreamEvent = Annotated[
+    MergeItemEvent
+    | BulkAppliedEvent
+    | BulkFailedEvent
+    | BulkRevertedEvent
+    | MergeSummaryEvent
+    | BulkErrorEvent,
+    Field(discriminator="type"),
+]
+
+
+class MergeJobSummary(BulkJobSummary):
+    """A reviewed merge, which knows the groups it would apply."""
+
+    merging: list[dict[str, Any]] = Field(default_factory=list)
+    rewritten_values: int = 0
+
+
+class MergeJobListResponse(BaseModel):
+    jobs: list[MergeJobSummary]
+    count: int
+
+
 # ------------------------------------------------------------ removal events
 
 
