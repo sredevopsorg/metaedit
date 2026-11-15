@@ -175,7 +175,12 @@ test('sorting is done by the server, not by the visible page', async ({ page }) 
   const firstPageAscending = await page.getByRole('link').allTextContents()
 
   await page.getByLabel('Sort by').selectOption('name')
-  await page.getByRole('checkbox', { name: 'descending' }).check()
+  // Same URL-state race as the `overview` aspect below: the sort controls write the query
+  // string and re-read it, so `check()`'s post-click verification can sample the box
+  // mid-cycle and report a click that did happen as having done nothing.
+  await page.getByRole('checkbox', { name: 'descending' }).click()
+  await expect(page).toHaveURL(/order=desc/)
+  await expect(page.getByRole('checkbox', { name: 'descending' })).toBeChecked()
 
   // If the frontend sorted the fetched page, "descending" would reverse the same 50 rows
   // and the first entry would be whatever happened to be last. A server-side sort brings
@@ -194,7 +199,8 @@ test('sorting resets to the first page', async ({ page }) => {
     { timeout: 15_000 },
   )
 
-  await page.getByLabel('descending').check()
+  await page.getByLabel('descending').click()
+  await expect(page).toHaveURL(/order=desc/)
   await expect(page.getByRole('navigation', { name: BOTTOM })).toContainText(
     'page 1 of',
   )
@@ -210,7 +216,15 @@ test('a scan-backed filter reports what it scanned', async ({ page, request }) =
     timeout: 15_000,
   })
 
-  await page.getByRole('checkbox', { name: 'overview' }).check()
+  // `check()` waits for the box to be checked *after* the click, and that read races this
+  // control: the toggle writes the URL, the re-render reads it back, and Playwright can
+  // sample the box between the two. The snapshot on failure shows `[checked]` and the
+  // filter chip applied, so the click worked and only the verification was early. Clicking
+  // and then asserting the observable outcome -- the filter is in the URL and applied -- is
+  // the same guarantee without depending on that intermediate frame.
+  await page.getByRole('checkbox', { name: 'overview' }).click()
+  await expect(page).toHaveURL(/missing=overview/)
+  await expect(page.getByRole('checkbox', { name: 'overview' })).toBeChecked()
 
   // Every artist was checked, so the note must say so rather than claim a lower bound.
   await expect(page.getByText(`from ${artists} checked`)).toBeVisible({ timeout: 15_000 })

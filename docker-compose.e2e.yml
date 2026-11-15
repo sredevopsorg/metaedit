@@ -148,6 +148,17 @@ services:
       ARCHIVE_FRESHNESS_TTL_S: '86400'
     ports:
       - '18080:8080'
+    # Chromium force-upgrades plain http:// to https:// for bare hostnames that sit in
+    # its upgrade list -- `app` is one of them -- so navigating to http://app:8080 hits a
+    # plain-HTTP port with a TLS handshake and dies as `net::ERR_SSL_PROTOCOL_ERROR`,
+    # before any certificate is even considered. `ignoreHTTPSErrors` does not help: the
+    # failure is the handshake, not trust. Adding an alias that is not on that list keeps
+    # the service name (and every depends_on above) intact while giving the browser an
+    # address it will not rewrite. See the `playwright` service for where it is used.
+    networks:
+      default:
+        aliases:
+          - metaedit-app
     healthcheck:
       test:
         - CMD
@@ -162,13 +173,18 @@ services:
     # Started explicitly by scripts/e2e.sh, never by `up`: it is a one-shot test run,
     # not a service, and `profiles` keeps a plain `up` from trying to run it.
     profiles: ['test']
-    image: mcr.microsoft.com/playwright:v1.49.1-noble
+    # Must equal the `@playwright/test` version in apps/web/package.json: the image ships
+    # the browser builds that the runner in the lockfile expects, and a mismatch fails at
+    # launch ("Executable doesn't exist"). Bump both together.
+    image: mcr.microsoft.com/playwright:v1.65.1-noble
     depends_on:
       app:
         condition: service_healthy
     environment:
-      E2E_BASE_URL: http://app:8080
-      E2E_API_URL: http://app:8080
+      # Addressed by alias, not by the service name `app`: see the note on the `app`
+      # service for why the browser refuses http://app:8080.
+      E2E_BASE_URL: http://metaedit-app:8080
+      E2E_API_URL: http://metaedit-app:8080
       E2E_STUB_URL: http://stub:8096
       E2E_LASTFM_URL: http://lastfm:8077
       CI: '1'

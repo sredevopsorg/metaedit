@@ -9,6 +9,48 @@ The version is `0.x`, which by SemVer means the interface may still change betwe
 releases. The metadata *contract* is the exception: what is written to Jellyfin is
 specified by ADRs 0003, 0004 and 0007 and those guarantees are treated as stable.
 
+## [Unreleased]
+
+### Security
+
+**Playwright upgraded past GHSA-7mvr-c777-76hp (CVE-2025-59288), a high-severity alert.**
+Playwright's browser reinstall scripts fetched installers with `curl -k`, disabling
+certificate validation, so a MitM on a hostile network could substitute the package that is
+then installed with elevated privileges. `@playwright/test` moves from a pinned `1.49.1` to
+`1.65.1` — above the advisory's patched version, `1.55.1`. This project only uses the
+runner and the official CI image rather than those scripts, so the exposure was low, but a
+high-severity alert against a pinned dependency is still an alert to close rather than
+argue with.
+
+The image tag in `docker-compose.e2e.yml` moves with it. The two versions are not
+independent: the image ships the browser builds that the runner in the lockfile expects, and
+a mismatch fails at launch with "Executable doesn't exist", so the coupling now says so in
+a comment rather than living in someone's memory.
+
+### Fixed
+
+**The e2e suite could not run at all on the newer browser.** All 52 specs failed with
+`net::ERR_SSL_PROTOCOL_ERROR` on `http://app:8080`, which reads like a certificate or
+reverse-proxy problem and is neither: Chromium force-upgrades plain `http://` to `https://`
+for bare hostnames on its upgrade list, and `app` is one of them, so a TLS handshake arrived
+at a plain-HTTP port. `ignoreHTTPSErrors` cannot help, because the handshake is the
+failure. The `app` service now carries a `metaedit-app` network alias and the browser is
+pointed at that; the service name, and every `depends_on`, is unchanged. Chromium exempts
+`localhost`/`127.0.0.1` deliberately, so the fix is a hostname the browser will not rewrite.
+
+**Toggling a library filter could be lost when two toggles landed in the same frame.**
+`toggleAspect` computed the next filter set from the `aspects` of the render that created
+the handler, so a second toggle before the URL round-tripped wrote the same base and undid
+the first. It now derives from the params handed to the `setSearchParams` updater, which is
+how a read-modify-write of the URL should be written.
+
+That bug surfaced as a flake in two specs: `checkbox.check()` verifies the box *after* the
+click, and the read raced the URL-driven re-render — the failure snapshot showed the box
+checked and the filter chip applied, so the click had worked and only the check was early.
+Those specs click and then assert the outcome (the parameter in the URL, then the checked
+state), which is the same guarantee without sampling an intermediate frame. Verified by
+repetition: 78/78 on the browse spec and 52/52 on the full suite, run twice.
+
 ## [0.2.1] - 2026-10-17
 
 ### Added
