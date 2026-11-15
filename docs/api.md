@@ -125,6 +125,35 @@ every genre from every selected item. `decompose: true` additionally removes mat
 *parts* of a packed value (`Rock, Reggae` → `Rock`); it is off by default and needs a scan,
 because Jellyfin cannot filter by part of a value. See ADR 0015.
 
+## Clearing everything, and merging similar spellings
+
+| Endpoint | Meaning |
+|---|---|
+| `POST /api/bulk/remove-all-tags/diff` | **SSE.** Every selected item, with what clearing the chosen fields would delete and what `exceptions` would keep. Returns a `job_id`. Writes nothing. |
+| `POST /api/bulk/remove-all-tags/apply` | **SSE.** Apply a reviewed clear. Requires `confirm: true`. |
+| `GET /api/bulk/remove-all-tags/jobs` | Reviewed clears still available to apply. |
+| `POST /api/bulk/merge-similar/preview` | Group values that are the same genre spelled differently (`Hip Hop`, `hip-hop`, `HipHop`). **Writes nothing.** |
+| `POST /api/bulk/merge-similar/diff` | **SSE.** What merging *the named groups* would rewrite, over a selection. Returns a `job_id`. Writes nothing. |
+| `POST /api/bulk/merge-similar/apply` | **SSE.** Apply a reviewed merge. Requires `confirm: true`. |
+| `GET /api/bulk/merge-similar/jobs` | Reviewed merges still available to apply. |
+
+Both reuse `POST /api/bulk/{batch_id}/revert` — they are batches like any other, and each
+write is snapshotted (ADR 0004).
+
+**Clearing** defaults to `Tags` only; `Genres` is selectable but is the more destructive
+option. An `exceptions` entry is matched exactly and case-insensitively — `Chile` keeps
+`chile` and `CHILE`, never `Chilean` and never a packed `Rock, Chile`. An **empty**
+`exceptions` list clears every value, which is the intended use and the largest edit this
+application offers: the diff reports how many items and values it would empty. An exception
+matching nothing is reported in `unmatched_exceptions`, because a typo would otherwise read
+as a successful exclusion. A blank exception is refused (422) rather than ignored.
+
+**Similarity merging is a preview, never automatic** (ADR 0018). The preview returns groups
+with their reason; a merge needs the groups named in the diff, so it cannot be a side effect
+of looking. The rule is lexical — case, separators and spacing — so `Rock` is never grouped
+with `Rockabilly` and `R&B` never with `Rhythm & Blues`. The normal Last.fm mapping is
+untouched: ADR 0015 still decides what the write path proposes.
+
 ## Archive
 
 | Endpoint | Meaning |

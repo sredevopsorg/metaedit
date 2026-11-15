@@ -9,6 +9,64 @@ The version is `0.x`, which by SemVer means the interface may still change betwe
 releases. The metadata *contract* is the exception: what is written to Jellyfin is
 specified by ADRs 0003, 0004 and 0007 and those guarantees are treated as stable.
 
+## [0.3.0] - 2026-11-15
+
+### Added
+
+**A batch that clears every tag except the ones you name.** "Remove all tags" was not
+expressible before: the removal tool takes one genre and matches it exactly. `/bulk/remove-all-tags`
+clears the chosen fields on the selected items and keeps a list — `keep: [Chile]` removes
+every other tag and leaves `Chile`, `chile` and `CHILE` alone, because matching is exact and
+case-insensitive. `Chilean` is not protected by `Chile`, and a packed `Rock, Chile` is not
+kept by it either.
+
+It defaults to `Tags`; `Genres` is selectable and is the more destructive choice. An empty
+keep list clears everything, which is the intended use and the largest edit this application
+offers, so the review reports how many items and values it would empty before the apply
+button exists at all.
+
+Two failure modes are reported rather than left silent, because both look like success: an
+exception that matches **nothing** in the selection appears in `unmatched_exceptions` (a typo
+would otherwise read as a working exclusion), and a scan that stopped at its cap sets
+`truncated` (a batch over part of a library is not a batch over a library).
+
+**Similar merging of spelling variants — as a preview, never automatically.** `Hip Hop`,
+`hip-hop` and `HipHop` are one genre written three ways; the live library also carries
+`Dark Wave` beside `Darkwave`. `/bulk/merge-similar/preview` groups them, shows why, and
+writes nothing. Confirming named groups turns them into a reviewed, revertible batch.
+
+The distinction the feature is built around: the rule is *lexical* — case, separators and
+spacing — so it will not decide that `Rock` and `Rockabilly`, `Pop` and `Pop Rock`, or `R&B`
+and `Rhythm & Blues` are the same genre. Those are judgements, and an automatic judgement
+applied across a library is exactly the class of edit nobody can review after the fact.
+`Drum & Bass` deliberately does not merge with `Drum and Bass`: treating `and` as a separator
+is an abbreviation rule, and abbreviation is where similarity starts inventing genres. See
+ADR 0018.
+
+The normal Last.fm mapping is **unchanged**: a diff still keeps `hip hop` and `hip-hop`
+distinct, because ADR 0015's exact matching still governs the write path. A test asserts it,
+so the guarantee cannot be lost by a later refactor that reuses the grouping function.
+
+### Changed
+
+**Genres and styles are both capped at 5.** `LASTFM_STYLE_LIMIT` falls from `10` to `5`, so a
+single Last.fm match can no longer add fifteen values to one item. `LASTFM_GENRE_LIMIT` was
+already `5`.
+
+**`LASTFM_GENRE_LIMIT` and `LASTFM_STYLE_LIMIT` now actually apply.** They were declared on
+`Settings` and read by nothing: the API carried its own hard-coded `5`/`10`, so setting
+either variable changed no diff. They are now the default for a request that does not name a
+limit, and `tag_policy` in a request body overrides them — with an explicit `0` meaning
+"promote nothing", which is a real answer an operator may give. `docs/configuration.md` and
+`.env.example` said `10` and are corrected.
+
+### Fixed
+
+**A `tag_policy` body that omitted the limits reset them to literals.** A caller overriding
+only `extra_blacklist` was implicitly restating `genre_limit`/`style_limit`, which is how the
+API's constants and the environment came to disagree. Both are now optional, and omitting
+them means "use the configured default".
+
 ## [0.2.2] - 2026-11-15
 
 ### Security
