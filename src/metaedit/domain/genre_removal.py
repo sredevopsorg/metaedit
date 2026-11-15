@@ -32,11 +32,12 @@ genres on the next merge); this module is about acting on a stored value on purp
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 from metaedit.adapters.lastfm.canonical import normalize_tag
+from metaedit.domain.errors import ValidationError
 from metaedit.domain.tags import SPLIT_PATTERN
 
 # Which fields a removal may act on. Both are string arrays on the Jellyfin item, and
@@ -261,3 +262,184 @@ def _first_separator(value: str) -> str:
         if found.strip() == "/":
             return " / "
     return ", "
+
+
+# ---------------------------------------------------------- clearing everything
+#
+# "Remove all tags, except ..." is the same matching question as removing one named value,
+# asked over the complement: which stored values are **not** in the operator's keep list.
+# It is the most destructive operation this application offers, so it is built out of the
+# same pieces as the single-value removal rather than as a wildcard matcher:
+#
+# * an exception is matched with :func:`matches` -- exact, case-insensitive, never a
+#   substring -- so a keep list naming ``Reggae`` never keeps ``"Rock, Reggae"`` by
+#   accident, and a keep list naming ``Rock`` never keeps ``Rockabilly``;
+# * a blank exception is refused rather than kept-and-ignored: an empty string matches
+#   nothing, so silently dropping it would look exactly like the exception working;
+# * an exception that matches nothing in the selection is reported (see
+#   ``service.remove_all_tags``) -- an operator typo otherwise reads as a successful
+#   exclusion, which is the one failure mode where the tool looks like it obeyed.
+
+
+def keep_set(exceptions: Iterable[str] | None) -> frozenset[str]:
+    """The comparison keys of an exception list, refusing blanks.
+
+    Returned as a set of :func:`normalise` keys so every later comparison is one lookup and
+    there is no second reading of "the same value" anywhere in this feature.
+
+    A blank entry raises rather than being skipped. The list is an operator's sentence
+    ("keep Chile"), and an empty line in it is not a value to keep -- it is a mistake whose
+    quietest outcome is a list that looks longer than it acts.
+    """
+    keys: set[str] = set()
+    for entry in exceptions or ():
+        key = normalise(entry)
+        if not key:
+            raise ValidationError(
+                "Refusing a blank exception: an empty value matches nothing, so it would "
+                "look like an exception that was applied and do nothing."
+            )
+        keys.add(key)
+    return frozenset(keys)
+
+
+def is_excepted(value: str | None, keep: frozenset[str]) -> bool:
+    """Whether a stored value is one of the operator's exceptions."""
+    return normalise(value) in keep
+
+
+def remove_all_except(
+    values: Iterable[str] | None, *, exceptions: Iterable[str] = ()
+) -> tuple[list[str], list[str]]:
+    """Clear every value except the exceptions. Returns ``(kept, removed)``.
+
+    Order is preserved for what survives -- a packed order is still an order the operator
+    curated. Duplicates are all removed unless they are kept, for the same reason
+    :func:`remove_value` removes every copy: one left behind looks like a failed removal.
+    """
+    keep = keep_set(exceptions)
+    kept: list[str] = []
+    removed: list[str] = []
+    for value in values or []:
+        if is_excepted(value, keep):
+            kept.append(value)
+        else:
+            removed.append(value)
+    return kept, removed
+
+
+@dataclass(frozen=True, slots=True)
+class ClearOutcome:
+    """What clearing a field would leave, and what the keep list did.
+
+    A sibling of :class:`RemovalOutcome` rather than a reuse of it: there is no single
+    ``target`` to name (the target is "everything"), and the interesting extra fact is
+    which exceptions actually matched -- the difference between a keep list that worked and
+    one that was typo'd.
+
+    ``exceptions`` is the normalised key set the removal was built with, carried so the
+    service can report the *unmatched* entries once, over the whole run, instead of
+    guessing from a single item.
+    """
+
+    field: str
+    before: list[str]
+    after: list[str]
+    removed: list[str]
+    exceptions: tuple[str, ...]
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.removed)
+
+    @property
+    def emptied(self) -> bool:
+        """The field would be left with nothing at all.
+
+        This is the intended outcome of "clear every tag", and it is still worth flagging:
+        it is the largest edit in the application, so the diff says how many items and how
+        many values it would empty rather than leaving the operator to infer it.
+        """
+        return bool(self.before) and not self.after
+
+    def kept_exceptions(self) -> list[str]:
+        """Which of the operator's exceptions this field actually exercised, as keys.
+
+        Keys rather than display strings, because the service unions them across every
+        item to answer "did any exception match anything at all?" -- and doing that on the
+        typed spelling would need re-normalising in the caller, which is the second reading
+        of "the same value" this module exists to avoid.
+        """
+        return [normalise(value) for value in self.after if normalise(value) in self.exceptions]
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "field": self.field,
+            "before": list(self.before),
+            "after": list(self.after),
+            "removed": list(self.removed),
+            "changed": self.changed,
+            "emptied": self.emptied,
+            "exceptions": list(self.exceptions),
+        }
+
+
+def plan_clear(
+    values: list[str] | None, *, field: str, exceptions: Iterable[str] = ()
+) -> ClearOutcome:
+    """What clearing one field, keeping ``exceptions``, would do."""
+    keys = keep_set(exceptions)
+    kept, removed = remove_all_except(values, exceptions=keys)
+    return ClearOutcome(
+        field=field,
+        before=list(values or []),
+        after=kept,
+        removed=removed,
+        exceptions=tuple(sorted(keys)),
+    )
+
+
+def plan_clears(
+    item: Mapping[str, object], *, fields: tuple[str, ...], exceptions: Iterable[str] = ()
+) -> list[ClearOutcome]:
+    """One outcome per requested field, for one item.
+
+    Same shape as :func:`plan_removals`, including the reason it takes a ``Mapping``: an
+    absent field is reported with an empty ``before`` rather than omitted, because an
+    omitted row is indistinguishable from a bug.
+    """
+    keys = keep_set(exceptions)
+    outcomes: list[ClearOutcome] = []
+    for field in fields:
+        raw = item.get(field)
+        values = [value for value in raw if isinstance(value, str)] if isinstance(raw, list) else []
+        outcomes.append(plan_clear(values, field=field, exceptions=keys))
+    return outcomes
+
+
+def split_kept_component(value: str, *, exceptions: Iterable[str]) -> SplitOutcome:
+    """Drop the packed components that are *not* exceptions.
+
+    The decompose reading of a clear: ``"Rock, Reggae"`` with exceptions ``["Reggae"]``
+    becomes ``"Reggae"``. Built from :func:`remove_component`'s pieces rather than a second
+    splitter, so the separator the value already used is the one it is rebuilt with.
+    """
+    keys = keep_set(exceptions)
+    components = split_packed_values(value)
+    kept = [component for component in components if normalise(component) in keys]
+    removed = [component for component in components if normalise(component) not in keys]
+
+    replacement: str | None
+    if not removed:
+        replacement = value
+    elif not kept:
+        replacement = None
+    else:
+        replacement = _first_separator(value).join(kept)
+    return SplitOutcome(
+        original=value,
+        components=components,
+        kept_components=kept,
+        removed_components=removed,
+        replacement=replacement,
+    )
