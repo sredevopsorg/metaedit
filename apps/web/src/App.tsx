@@ -5,6 +5,8 @@ import { Bulk } from './routes/Bulk'
 import { Review } from './routes/Review'
 import { Archive } from './routes/Archive'
 import { GenreRemoval } from './routes/GenreRemoval'
+import { RemoveAllTags } from './routes/RemoveAllTags'
+import { MergeSimilar } from './routes/MergeSimilar'
 import { Settings } from './routes/Settings'
 import { NotFound } from './routes/NotFound'
 
@@ -20,6 +22,8 @@ export function App() {
           </NavLink>
           <NavLink to="/bulk">Bulk</NavLink>
           <NavLink to="/remove-genre">Remove genre</NavLink>
+          <NavLink to="/remove-all-tags">Clear tags</NavLink>
+          <NavLink to="/merge-similar">Merge similar</NavLink>
           <NavLink to="/archive">Archive</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
@@ -30,6 +34,8 @@ export function App() {
         <Route path="/review" element={<Review />} />
         <Route path="/bulk" element={<Bulk />} />
         <Route path="/remove-genre" element={<GenreRemoval />} />
+        <Route path="/remove-all-tags" element={<RemoveAllTags />} />
+        <Route path="/merge-similar" element={<MergeSimilar />} />
         <Route path="/archive" element={<Archive />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />

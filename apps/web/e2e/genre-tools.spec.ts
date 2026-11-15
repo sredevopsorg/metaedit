@@ -280,3 +280,112 @@ test('splitting packed values is offered separately and changes the result', asy
     page.getByText(/it is also removed from a packed value like/),
   ).toBeVisible()
 })
+
+// ------------------------------------------------------------ clearing all tags
+//
+// Every artist in the stub library carries `Tags: ["keep-me"]`, which is what makes the
+// keep list observable: with no exception the tag is removed, and with `keep-me` named it
+// must survive. Asserting on the written body rather than on the screen is deliberate --
+// the screen can say "kept" while the payload disagrees, and the payload is what Jellyfin
+// applies.
+
+test('clearing all tags removes them when nothing is kept', async ({ page, request }) => {
+  const original = await item(request, 'art-1')
+  expect(original.Tags).toEqual(['keep-me'])
+
+  await page.goto('/remove-all-tags')
+  await expect(
+    page.getByRole('heading', { name: 'Remove all tags, keeping exceptions' }),
+  ).toBeVisible()
+
+  // No exception list: the button says so in words, because "clear everything" is a
+  // decision an operator should have to read before clicking.
+  await page.getByRole('button', { name: /Review — clear everything/ }).click()
+  await page.getByRole('button', { name: /Clear \d+ item/ }).click()
+  await expect(page.getByRole('heading', { name: 'Applied' })).toBeVisible()
+
+  // Polled rather than sampled. The apply streams one frame per item, and the "Applied"
+  // heading renders on the first frame -- so a single read here races the remaining 62
+  // items and saw zero writes for this one. The batch runs over every artist in the stub
+  // library, and the order is the library's, not this item's.
+  const target = await idOf(request, 'art-1')
+  await expect
+    .poll(
+      async () => (await writes(request)).filter((write) => write.item_id === target).length,
+      { timeout: 20_000 },
+    )
+    .toBe(1)
+
+  const sent = (await writes(request)).filter((write) => write.item_id === target)
+  expect(sent[0]!.body.Tags).toEqual([])
+  // The full overwrite still carries everything else (ADR 0003).
+  expect(sent[0]!.body.Genres).toEqual(original.Genres)
+  expect(sent[0]!.body.ProviderIds).toEqual(original.ProviderIds)
+})
+
+test('a kept tag survives the clear', async ({ page, request }) => {
+  // The feature as asked for: remove all tags, except this one.
+  //
+  // Every artist in the stub library carries exactly `Tags: ["keep-me"]`, so keeping it
+  // means there is nothing to clear -- and the run correctly applies to zero items. The
+  // assertion is therefore on the review, which is where "kept" becomes observable: the
+  // kept value must never appear under "Removing", and the apply button must stay inert.
+  // Polling for a write here would wait forever for one that should not happen.
+  await page.goto('/remove-all-tags')
+  await page.getByLabel('keep these (one per line)').fill('keep-me')
+  await page.getByRole('button', { name: /Review — clearing all but 1/ }).click()
+
+  const table = page.locator('table.grid').first()
+  await expect(table).toBeVisible()
+  // The kept value is what remains, so it shows as kept rather than as removed.
+  await expect(table.locator('.danger-chip')).toHaveCount(0)
+  await expect(page.getByText(/0 would change/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Clear / })).toBeDisabled()
+
+  // And nothing was written: keeping the only value means no item needed an edit.
+  expect(await writes(request)).toEqual([])
+})
+
+test('the keep list is shown back before anything is reviewed', async ({ page }) => {
+  await page.goto('/remove-all-tags')
+  await page.getByLabel('keep these (one per line)').fill('Chile\nRock')
+  await expect(page.getByText(/Keeping 2 value/)).toBeVisible()
+  await expect(page.locator('.chip', { hasText: 'Chile' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /clearing all but 2/ })).toBeVisible()
+})
+
+test('an exception that matches nothing is reported rather than ignored', async ({ page }) => {
+  // A typo'd exception otherwise reads as a successful exclusion.
+  await page.goto('/remove-all-tags')
+  await page.getByLabel('keep these (one per line)').fill('not-a-real-tag')
+  await page.getByRole('button', { name: /Review — clearing all but 1/ }).click()
+  await expect(page.getByText(/match nothing in the selection/)).toBeVisible()
+})
+
+test('reviewing a clear writes nothing', async ({ page, request }) => {
+  await page.goto('/remove-all-tags')
+  await page.getByRole('button', { name: /Review — clear everything/ }).click()
+  await expect(page.locator('table.grid').first()).toBeVisible()
+  expect(await writes(request)).toEqual([])
+})
+
+// ------------------------------------------------------------ merge by similarity
+
+test('the similarity preview writes nothing and merges nothing', async ({ page, request }) => {
+  // The constraint the feature was built around: similarity is a preview. A well-meant
+  // auto-merge would rewrite a whole library on a judgement call.
+  await page.goto('/merge-similar')
+  await expect(page.getByRole('heading', { name: 'Merge similar genres' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Find similar genres' }).click()
+
+  // The stub library's values are all distinct, so there is nothing to group, and the
+  // screen has to say that plainly rather than looking broken. Matched on the heading,
+  // because the phrase "groups found" also appears in the panel's own summary line.
+  // The empty-state is a paragraph, the summary is the panel heading: match whichever
+  // the library produces, scoped so the summary text cannot satisfy it by itself.
+  const panel = page.locator('.panel', { hasText: 'Groups found' })
+  await expect(panel).toBeVisible()
+  await expect(panel.getByText('No spelling variants found')).toBeVisible()
+  expect(await writes(request)).toEqual([])
+})
