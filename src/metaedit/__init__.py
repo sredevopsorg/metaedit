@@ -1,3 +1,3 @@
 """metaedit: Jellyfin metadata editing backed by a persistent Last.fm archive."""
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
