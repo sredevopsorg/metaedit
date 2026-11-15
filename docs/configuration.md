@@ -90,8 +90,8 @@ Logs go to **stderr** — the CLI keeps stdout parseable for its JSON reports.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LASTFM_MIN_TAG_COUNT` | `0` | Tags below this `getTopTags` count are not proposed. |
-| `LASTFM_GENRE_LIMIT` | `5` | How many genres mapping proposes at most. |
-| `LASTFM_STYLE_LIMIT` | `10` | How many styles (mapped onto `Tags`) at most. |
+| `LASTFM_GENRE_LIMIT` | `5` | How many genres mapping proposes at most. The default for a request that does not name a limit; a request may still ask for more. |
+| `LASTFM_STYLE_LIMIT` | `5` | How many styles (mapped onto `Tags`) at most. Same defaulting rule as above. |
 | `MAX_TAGS_PER_ITEM` | `30` | Hard ceiling on tags written per item. |
 | `MAX_TAG_LENGTH` | `100` | Maximum tag length accepted. |
 | `TAG_BLACKLIST_EXTRA` | *(empty)* | Comma-separated genres never *proposed* — deployment policy, merged with the built-in list and the database list edited at Settings → *Blacklisted genres*. Matching is exact and case-insensitive; it never rewrites existing items. |

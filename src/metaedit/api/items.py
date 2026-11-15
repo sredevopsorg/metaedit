@@ -58,8 +58,19 @@ class FieldPolicyOverride(BaseModel):
 
 
 class TagPolicyRequest(BaseModel):
-    genre_limit: int = Field(default=5, ge=0, le=50)
-    style_limit: int = Field(default=10, ge=0, le=50)
+    """Per-request overrides of the tag policy.
+
+    ``None`` means "use the configured default" rather than "use zero": a client that only
+    wants to override the blacklist must not have to restate the limits, and restating
+    them is how the API's literals and ``LASTFM_GENRE_LIMIT`` came to disagree.
+
+    ``ge=0`` still holds for an explicit value, so a deliberate ``0`` remains expressible:
+    it means "promote nothing into this field", which is a legitimate answer for an
+    operator who only wants one of the two populated.
+    """
+
+    genre_limit: int | None = Field(default=None, ge=0, le=50)
+    style_limit: int | None = Field(default=None, ge=0, le=50)
     min_count: int = Field(default=0, ge=0)
     extra_blacklist: list[str] = Field(default_factory=list)
 
@@ -250,20 +261,31 @@ async def revert(
 # --------------------------------------------------------------------- helpers
 
 
-def tag_policy_from(request: TagPolicyRequest | None) -> TagPolicy:
-    """The policy for one request, from the request body alone.
+def tag_policy_from(
+    request: TagPolicyRequest | None, settings: Settings | None = None
+) -> TagPolicy:
+    """The policy for one request, from the request body and the configured defaults.
 
     Synchronous, and therefore *without* the stored blacklist: ``blacklist=`` is left at
     its empty default here and filled in by :func:`tag_policy_with_stored_blacklist`. The
     split exists because four call sites need the stored list and several unit tests need
     a body-only policy, and threading a session through all of them to serve the first
     group would make the pure path untestable.
+
+    ``settings`` is optional only so those unit tests keep working; every path that can be
+    reached by a request passes it, because without it the limits silently fall back to
+    ``TagPolicy``'s own dataclass defaults and the env vars do nothing.
     """
+    if settings is not None:
+        genre_limit, style_limit = settings.tag_policy_defaults
+    else:
+        fallback = TagPolicy()
+        genre_limit, style_limit = fallback.genre_limit, fallback.style_limit
     if request is None:
-        return TagPolicy()
+        return TagPolicy(genre_limit=genre_limit, style_limit=style_limit)
     return TagPolicy(
-        genre_limit=request.genre_limit,
-        style_limit=request.style_limit,
+        genre_limit=request.genre_limit if request.genre_limit is not None else genre_limit,
+        style_limit=request.style_limit if request.style_limit is not None else style_limit,
         min_count=request.min_count,
         extra_blacklist=frozenset(name.casefold() for name in request.extra_blacklist),
     )
@@ -286,7 +308,7 @@ async def tag_policy_with_stored_blacklist(
     tens of rows, and a cached copy would go stale the moment the operator saved a change
     -- reintroducing exactly the "why do I need a restart" problem this replaced.
     """
-    policy = tag_policy_from(request)
+    policy = tag_policy_from(request, settings)
     stored = await genre_blacklist.effective(session, settings)
     return replace(policy, blacklist=stored)
 
