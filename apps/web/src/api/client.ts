@@ -199,6 +199,52 @@ export type RemovalEvent =
 /** Which arrays a removal may act on. Closed on the server; mirrored for the UI. */
 export type RemovalField = 'Genres' | 'Tags'
 
+// ------------------------------------------------------------------ batch 2
+//
+// "Remove all tags except ..." and "merge spellings of one genre". Two more reviewed
+// batches over the same lifecycle, so they reuse the removal event union shape and the
+// same stream reader -- only the payloads and the outcome details differ.
+
+export type RemoveAllTagsRequest = Schemas['RemoveAllTagsRequest']
+export type RemoveAllTagsApplyRequest = Schemas['ClearApplyRequest']
+export type ClearSelection = Schemas['ClearSelection']
+export type ClearApplyRequest = Schemas['ClearApplyRequest']
+export type ClearOutcomeView = Schemas['ClearOutcomeView']
+export type ClearJobSummary = Schemas['ClearJobSummary']
+export type ClearJobListResponse = Schemas['ClearJobListResponse']
+export type ClearItemEvent = Schemas['ClearItemEvent']
+export type ClearSummaryEvent = Schemas['ClearSummaryEvent']
+export type MergeSimilarRequest = Schemas['MergeSimilarRequest']
+export type MergeGroupRequest = Schemas['MergeGroupRequest']
+export type SimilarityPreviewRequest = Schemas['SimilarityPreviewRequest']
+export type SimilarityPreviewResponse = Schemas['SimilarityPreviewResponse']
+export type SimilarityGroupView = Schemas['SimilarityGroupView']
+export type MergeJobSummary = Schemas['MergeJobSummary']
+export type MergeJobListResponse = Schemas['MergeJobListResponse']
+export type MergeItemEvent = Schemas['MergeItemEvent']
+export type MergeSummaryEvent = Schemas['MergeSummaryEvent']
+
+/** Merge apply reuses the clear apply body: a job id, per-item fields, and `confirm`. */
+export type MergeApplyRequest = ClearApplyRequest
+
+/**
+ * Frames from either of the two newer batch streams.
+ *
+ * One union for both because the item/summary/applied/failed frames are shared, and a
+ * consumer that switches on `type` handles either stream with the same code.
+ */
+export type BatchEvent =
+  | ClearItemEvent
+  | MergeItemEvent
+  | BulkAppliedEvent
+  | BulkFailedEvent
+  | BulkRevertedEvent
+  | ClearSummaryEvent
+  | MergeSummaryEvent
+  | BulkErrorEvent
+  | { type: 'done' }
+
+
 // The SSE event union. The backend declares the individual frames; the discriminated
 // union is assembled here because that is what a consumer switches on.
 export type BulkItemEvent = Schemas['BulkItemEvent']

@@ -107,3 +107,32 @@ def test_default_ratios_warn_before_refusing() -> None:
 def test_negative_cap_rejected() -> None:
     with pytest.raises(ValueError, match="must be positive"):
         Settings(_env_file=None, ARCHIVE_SOFT_CAP_BYTES=-1)  # type: ignore[call-arg]
+
+
+# ---------------------------------------------------- tag policy limits
+
+
+def test_tag_policy_defaults_are_five_and_five() -> None:
+    """Both limits default to 5.
+
+    Styles were 10 and genres 5, so one item could gain fifteen values from a single
+    Last.fm match. Five and five is the documented default from 0.3.0 onward.
+    """
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.tag_policy_defaults == (5, 5)
+    assert settings.lastfm_genre_limit == 5
+    assert settings.lastfm_style_limit == 5
+
+
+def test_tag_policy_defaults_are_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``LASTFM_*_LIMIT`` must reach the policy, not just exist on the model.
+
+    This is the regression test for the actual defect: both variables were declared here
+    and read by nothing, so an operator could set them and observe no effect anywhere.
+    """
+    monkeypatch.setenv("LASTFM_GENRE_LIMIT", "3")
+    monkeypatch.setenv("LASTFM_STYLE_LIMIT", "7")
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.tag_policy_defaults == (3, 7)

@@ -251,6 +251,183 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bulk/merge-similar/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Similar Apply
+         * @description Apply a reviewed merge, streaming progress and isolating failures per item.
+         *
+         *     ``confirm`` must be true and the job must exist, so a merge is never the first request
+         *     of a session and never happens without a preview of the exact groups it applies. Every
+         *     write is snapshotted before it happens and shares the job's ``batch_id``, so the run is
+         *     undoable through ``/{batch_id}/revert``.
+         */
+        post: operations["merge_similar_apply_api_bulk_merge_similar_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/merge-similar/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Similar Diff
+         * @description Diff a confirmed merge over a selection. **Writes nothing.**
+         *
+         *     The groups in the body are what makes this a review rather than an automatic pass: they
+         *     come from ``/merge-similar/preview``, and every one is re-checked against the similarity
+         *     rule before anything is planned. An item that carries a spelling the preview did not
+         *     group is reported as skipped rather than half-merged.
+         *
+         *     Selection is read rather than forwarded: Jellyfin cannot ask for "any of these spellings,
+         *     in either of two arrays", so the batch pages the media type and says what it read.
+         */
+        post: operations["merge_similar_diff_api_bulk_merge_similar_diff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/merge-similar/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Merge Jobs
+         * @description Reviewed merges still available to apply, with the groups they apply.
+         */
+        get: operations["list_merge_jobs_api_bulk_merge_similar_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/merge-similar/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Similar Preview
+         * @description Group values that are the same genre spelled differently. **Writes nothing.**
+         *
+         *     ``Hip Hop``, ``hip-hop`` and ``HipHop`` are one genre written three ways; this reports
+         *     the groups, how often each spelling occurs, and the canonical spelling a merge would
+         *     keep. It does not merge anything, and nothing consumes it automatically: the operator
+         *     confirms groups by name at ``/merge-similar/diff``.
+         *
+         *     Reading the library is bounded by the scan cap, and ``truncated`` says so: a preview
+         *     that saw part of a library saw part of its vocabulary. Read-only throughout.
+         */
+        post: operations["merge_similar_preview_api_bulk_merge_similar_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/remove-all-tags/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove All Tags Apply
+         * @description Apply a reviewed clear, streaming progress and isolating failures per item.
+         *
+         *     ``confirm`` must be true and the job must exist, so a clear is never the first request
+         *     of a session. Every write is snapshotted before it happens and shares the job's
+         *     ``batch_id``, so the whole run is undoable through ``/{batch_id}/revert``.
+         */
+        post: operations["remove_all_tags_apply_api_bulk_remove_all_tags_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/remove-all-tags/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove All Tags Diff
+         * @description Show what clearing every tag (except the exceptions) would do.
+         *
+         *     **Writes nothing.** The job id in the summary is what a later apply must present, so a
+         *     library-wide clear can never be the first thing a session does.
+         *
+         *     The summary reports what the operator has to see before confirming: how many items and
+         *     how many stored values would be deleted, which fields would be left empty, and which
+         *     exceptions matched nothing. That last one is the difference between a keep list and a
+         *     typo -- matching is exact, so a misspelt exception keeps nothing at all.
+         *
+         *     Selection is *read*: Jellyfin can filter by one genre but cannot express "everything
+         *     except X", so the batch pages through the media type, bounded by the scan cap. The
+         *     summary says how many items were read and whether the read stopped at the cap.
+         */
+        post: operations["remove_all_tags_diff_api_bulk_remove_all_tags_diff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bulk/remove-all-tags/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Clear Jobs
+         * @description Reviewed clears still available to apply, with what they keep.
+         */
+        get: operations["list_clear_jobs_api_bulk_remove_all_tags_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bulk/remove-genre/apply": {
         parameters: {
             query?: never;
@@ -1372,6 +1549,227 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** ClearApplyRequest */
+        ClearApplyRequest: {
+            /**
+             * Confirm
+             * @description must be true
+             * @default false
+             */
+            confirm: boolean;
+            /**
+             * Job Id
+             * @description from a /bulk/remove-all-tags/diff run
+             */
+            job_id: string;
+            /**
+             * Selections
+             * @description per-item fields, keyed by item id. An item absent from the map falls back to its own default, which for a clear is the field set the operator asked about.
+             */
+            selections?: {
+                [key: string]: string[];
+            } | null;
+        };
+        /**
+         * ClearItemEvent
+         * @description One item in a clear diff, carrying the per-field outcomes.
+         *
+         *     Extends ``BulkItemEvent`` so the ``diff`` the review UI already renders keeps one
+         *     definition, and reuses the ``removals`` key so one client handles both removal features.
+         */
+        ClearItemEvent: {
+            /** Applicable */
+            applicable: boolean;
+            diff: components["schemas"]["DiffResponse"];
+            /** Index */
+            index: number;
+            /** Item Id */
+            item_id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Removals */
+            removals?: components["schemas"]["ClearOutcomeView"][];
+            /** Skipped Reason */
+            skipped_reason: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item";
+        };
+        /** ClearJobListResponse */
+        ClearJobListResponse: {
+            /** Count */
+            count: number;
+            /** Jobs */
+            jobs: components["schemas"]["ClearJobSummary"][];
+        };
+        /**
+         * ClearJobSummary
+         * @description A reviewed clear, which knows the fields it clears and what it keeps.
+         */
+        ClearJobSummary: {
+            /** Applicable */
+            applicable: number;
+            /** Applied */
+            applied: boolean;
+            /** Batch Id */
+            batch_id: string;
+            /** Clearing */
+            clearing?: string[];
+            /** Created At */
+            created_at: string;
+            /**
+             * Excluded
+             * @default 0
+             */
+            excluded: number;
+            /** Items */
+            items: number;
+            /** Job Id */
+            job_id: string;
+            /** Keeping */
+            keeping?: string[];
+            /**
+             * Removed Values
+             * @default 0
+             */
+            removed_values: number;
+            /** Removing */
+            removing?: string | null;
+            /** Skipped */
+            skipped: number;
+            /** Unmatched Exceptions */
+            unmatched_exceptions?: string[];
+        };
+        /**
+         * ClearOutcomeView
+         * @description What clearing one field of one item would leave.
+         *
+         *     Mirrors ``domain.genre_removal.ClearOutcome.as_dict()``. A sibling of
+         *     ``RemovalOutcomeView`` rather than a reuse: there is no single ``target`` when the target
+         *     is *everything*, and the fact worth reporting instead is which exceptions survived and
+         *     whether the field would be left empty -- which is the whole reason this operation needs a
+         *     review step at all.
+         */
+        ClearOutcomeView: {
+            /** After */
+            after: string[];
+            /** Before */
+            before: string[];
+            /** Changed */
+            changed: boolean;
+            /** Emptied */
+            emptied: boolean;
+            /** Exceptions */
+            exceptions: string[];
+            /** Field */
+            field: string;
+            /** Removed */
+            removed: string[];
+        };
+        /**
+         * ClearSelection
+         * @description Which items to clear, and the same narrowings every batch accepts.
+         *
+         *     No `missing` filter here, unlike `BulkSelection`: an item with no tags has nothing to
+         *     clear, so asking for it would select a batch that writes nothing.
+         */
+        ClearSelection: {
+            /**
+             * Album Ids
+             * @description only songs on these albums; applies to `song`
+             */
+            album_ids?: string[];
+            /**
+             * Artist Ids
+             * @description only items credited to these artists; applies to `album` and `song`
+             */
+            artist_ids?: string[];
+            /**
+             * Exclude
+             * @description case-insensitive glob patterns; an item whose name, album or album artist matches any of them is dropped. Worth more here than anywhere else: clearing every tag from the compilations is rarely meant.
+             */
+            exclude?: string[];
+            /**
+             * Ids
+             * @description explicit item ids, if known
+             */
+            ids?: string[] | null;
+            /**
+             * Kind
+             * @default artist
+             * @enum {string}
+             */
+            kind: "artist" | "album" | "song";
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Search */
+            search?: string | null;
+        };
+        /**
+         * ClearSummaryEvent
+         * @description The closing frame of a clear run, which knows what it kept and what it would empty.
+         *
+         *     ``unmatched_exceptions`` is not decoration. Matching is exact (ADR 0015), so a misspelt
+         *     exception keeps nothing and the operator would otherwise learn that after the write
+         *     rather than before it.
+         */
+        ClearSummaryEvent: {
+            /** Applicable */
+            applicable: number | null;
+            /** Applied */
+            applied: number | null;
+            /** Batch Id */
+            batch_id: string | null;
+            /** Batch Revert */
+            batch_revert: string | null;
+            /** Clearing */
+            clearing?: string[];
+            /** Emptied */
+            emptied?: components["schemas"]["EmptiedField"][];
+            /** Excluded */
+            excluded?: number | null;
+            /** Failed */
+            failed: number | null;
+            /** Failures */
+            failures: {
+                [key: string]: unknown;
+            }[];
+            /** Items */
+            items: number | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Keeping */
+            keeping?: string[];
+            /**
+             * Removed Values
+             * @default 0
+             */
+            removed_values: number;
+            /** Reverted */
+            reverted: number | null;
+            /** Scanned */
+            scanned?: number | null;
+            /** Skipped */
+            skipped: number | null;
+            /** Truncated */
+            truncated?: boolean | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "summary";
+            /** Unmatched Exceptions */
+            unmatched_exceptions?: string[];
+        };
         /**
          * ConfidenceComponentView
          * @description One weighted component of a match score, with its contribution.
@@ -1980,6 +2378,185 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * MergeGroupRequest
+         * @description One group the operator confirmed, exactly as the preview reported it.
+         */
+        MergeGroupRequest: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "Genres" | "Tags";
+            /** Representative */
+            representative: string;
+            /** Spellings */
+            spellings: string[];
+        };
+        /**
+         * MergeItemEvent
+         * @description One item in a merge diff, carrying the rewordings.
+         */
+        MergeItemEvent: {
+            /** Applicable */
+            applicable: boolean;
+            diff: components["schemas"]["DiffResponse"];
+            /** Index */
+            index: number;
+            /** Item Id */
+            item_id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Merge
+             * @description per field, the positions that would be rewritten
+             */
+            merge?: {
+                [key: string]: number[];
+            };
+            /** Name */
+            name: string;
+            /** Removals */
+            removals?: components["schemas"]["MergeOutcomeView"][];
+            /** Skipped Reason */
+            skipped_reason: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item";
+        };
+        /** MergeJobListResponse */
+        MergeJobListResponse: {
+            /** Count */
+            count: number;
+            /** Jobs */
+            jobs: components["schemas"]["MergeJobSummary"][];
+        };
+        /**
+         * MergeJobSummary
+         * @description A reviewed merge, which knows the groups it would apply.
+         */
+        MergeJobSummary: {
+            /** Applicable */
+            applicable: number;
+            /** Applied */
+            applied: boolean;
+            /** Batch Id */
+            batch_id: string;
+            /** Created At */
+            created_at: string;
+            /**
+             * Excluded
+             * @default 0
+             */
+            excluded: number;
+            /** Items */
+            items: number;
+            /** Job Id */
+            job_id: string;
+            /** Merging */
+            merging?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Rewritten Values
+             * @default 0
+             */
+            rewritten_values: number;
+            /** Skipped */
+            skipped: number;
+        };
+        /**
+         * MergeOutcomeView
+         * @description One rewording of one field of one item.
+         *
+         *     Under the ``removals`` key of an item frame, because a merge and a removal answer the
+         *     same question -- "this value becomes that one" -- and one client should render both.
+         */
+        MergeOutcomeView: {
+            /** After */
+            after: string[];
+            /** Before */
+            before: string[];
+            /** Changed */
+            changed: number[];
+            /** Field */
+            field: string;
+            /** To */
+            to: string | null;
+        };
+        /**
+         * MergeSimilarRequest
+         * @description Confirmed groups, and where to apply them.
+         */
+        MergeSimilarRequest: {
+            /**
+             * Groups
+             * @description the groups to merge. Required: a merge never runs automatically, and a group the similarity rule would not have produced is refused.
+             */
+            groups: components["schemas"]["MergeGroupRequest"][];
+            /**
+             * @default {
+             *       "album_ids": [],
+             *       "artist_ids": [],
+             *       "exclude": [],
+             *       "kind": "artist",
+             *       "limit": 100
+             *     }
+             */
+            selection: components["schemas"]["ClearSelection"];
+        };
+        /**
+         * MergeSummaryEvent
+         * @description The closing frame of a merge run, which knows what it merges into what.
+         */
+        MergeSummaryEvent: {
+            /** Applicable */
+            applicable: number | null;
+            /** Applied */
+            applied: number | null;
+            /** Batch Id */
+            batch_id: string | null;
+            /** Batch Revert */
+            batch_revert: string | null;
+            /** Emptied */
+            emptied?: components["schemas"]["EmptiedField"][];
+            /** Excluded */
+            excluded?: number | null;
+            /** Failed */
+            failed: number | null;
+            /** Failures */
+            failures: {
+                [key: string]: unknown;
+            }[];
+            /** Items */
+            items: number | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Merging */
+            merging?: {
+                [key: string]: unknown;
+            }[];
+            /** Reverted */
+            reverted: number | null;
+            /**
+             * Rewritten Values
+             * @default 0
+             */
+            rewritten_values: number;
+            /** Scanned */
+            scanned?: number | null;
+            /** Skipped */
+            skipped: number | null;
+            /** Truncated */
+            truncated?: boolean | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "summary";
+        };
         /** PartitionUsage */
         PartitionUsage: {
             /** Name */
@@ -2212,6 +2789,38 @@ export interface components {
             type: "summary";
         };
         /**
+         * RemoveAllTagsRequest
+         * @description Which fields to clear, and what to keep.
+         */
+        RemoveAllTagsRequest: {
+            /**
+             * Decompose
+             * @description also apply inside a packed value ('Rock, Reggae' with exceptions ['Reggae'] becomes 'Reggae'). Off by default: it is the destructive reading of a value that may be one genre whose name contains a separator.
+             * @default false
+             */
+            decompose: boolean;
+            /**
+             * Exceptions
+             * @description values to KEEP. Matched exactly and case-insensitively, never as a substring: keeping 'Reggae' does not keep 'Rock, Reggae'. An empty list clears everything, which is the intended use and the largest edit this application offers -- the diff reports how many items and values it would empty.
+             */
+            exceptions?: string[];
+            /**
+             * Fields
+             * @description which arrays to clear. `Tags` by default; `Genres` is opt-in because it is what Jellyfin navigates and filters by.
+             */
+            fields?: ("Genres" | "Tags")[];
+            /**
+             * @default {
+             *       "album_ids": [],
+             *       "artist_ids": [],
+             *       "exclude": [],
+             *       "kind": "artist",
+             *       "limit": 100
+             *     }
+             */
+            selection: components["schemas"]["ClearSelection"];
+        };
+        /**
          * ScanInfo
          * @description What a filter that required reading items actually read.
          *
@@ -2252,6 +2861,101 @@ export interface components {
             /** Url */
             url: string | null;
         };
+        /**
+         * SimilarityGroupView
+         * @description Values a merge would collapse into one spelling.
+         *
+         *     ``merge`` is the ``{from: to}`` map a confirmation needs, computed once on the server so
+         *     a preview and an apply cannot disagree by recomputing it in two places.
+         */
+        SimilarityGroupView: {
+            /** Field */
+            field: string;
+            /** Merge */
+            merge: {
+                [key: string]: string;
+            };
+            /** Representative */
+            representative: string;
+            /** Squashed */
+            squashed: string;
+            /** Total */
+            total: number;
+            /** Variants */
+            variants: components["schemas"]["SpellingVariantView"][];
+        };
+        /**
+         * SimilarityPreviewRequest
+         * @description Where the vocabulary comes from, and what to hold back.
+         */
+        SimilarityPreviewRequest: {
+            /**
+             * Exceptions
+             * @description individual spellings never to merge. An exception that matches nothing is reported in `hints` rather than ignored.
+             */
+            exceptions?: string[];
+            /**
+             * Fields
+             * @description which arrays to compare. Both by default: they hold different vocabularies, and only one of them being listed would hide half the spellings.
+             */
+            fields?: ("Genres" | "Tags")[];
+            /**
+             * Keep
+             * @description genres whose whole group must be left alone
+             */
+            keep?: string[];
+            /**
+             * Kind
+             * @description media type to read when `values` is omitted
+             * @default artist
+             * @enum {string}
+             */
+            kind: "artist" | "album" | "song";
+            /**
+             * Parent Id
+             * @description a Jellyfin library id to read
+             */
+            parent_id?: string | null;
+            /**
+             * Values
+             * @description compare this explicit list instead of reading the library
+             */
+            values?: string[] | null;
+        };
+        /**
+         * SimilarityPreviewResponse
+         * @description What a similarity pass found. **Writes nothing.**
+         *
+         *     ``truncated`` is a statement about the answer, not an implementation detail: a preview
+         *     that read only part of a library saw only part of its vocabulary, and ``groups`` is then
+         *     a lower bound. ``hints`` carries what the grouping refused to do -- an exception that
+         *     matched nothing, a value sitting beside a shorter word it contains -- because those are
+         *     the cases where silence would look like agreement.
+         */
+        SimilarityPreviewResponse: {
+            /** Distinct Values */
+            distinct_values: number;
+            /** Groups */
+            groups?: components["schemas"]["SimilarityGroupView"][];
+            /** Hints */
+            hints?: string[];
+            /** Scanned */
+            scanned?: number | null;
+            /** Source */
+            source: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /**
+             * Withheld
+             * @description groups the keep/exceptions narrowed away, with the reason
+             */
+            withheld?: {
+                [key: string]: unknown;
+            }[];
+        };
         /** SnapshotListResponse */
         SnapshotListResponse: {
             /** Count */
@@ -2278,25 +2982,42 @@ export interface components {
             /** Source Op */
             source_op: string;
         };
-        /** TagPolicyRequest */
+        /**
+         * SpellingVariantView
+         * @description One spelling of a genre, and how often the library uses it.
+         */
+        SpellingVariantView: {
+            /** Count */
+            count: number;
+            /** Repeated */
+            repeated: boolean;
+            /** Value */
+            value: string;
+        };
+        /**
+         * TagPolicyRequest
+         * @description Per-request overrides of the tag policy.
+         *
+         *     ``None`` means "use the configured default" rather than "use zero": a client that only
+         *     wants to override the blacklist must not have to restate the limits, and restating
+         *     them is how the API's literals and ``LASTFM_GENRE_LIMIT`` came to disagree.
+         *
+         *     ``ge=0`` still holds for an explicit value, so a deliberate ``0`` remains expressible:
+         *     it means "promote nothing into this field", which is a legitimate answer for an
+         *     operator who only wants one of the two populated.
+         */
         TagPolicyRequest: {
             /** Extra Blacklist */
             extra_blacklist?: string[];
-            /**
-             * Genre Limit
-             * @default 5
-             */
-            genre_limit: number;
+            /** Genre Limit */
+            genre_limit?: number | null;
             /**
              * Min Count
              * @default 0
              */
             min_count: number;
-            /**
-             * Style Limit
-             * @default 10
-             */
-            style_limit: number;
+            /** Style Limit */
+            style_limit?: number | null;
         };
         /** UpdateResponse */
         UpdateResponse: {
@@ -2646,6 +3367,215 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkJobListResponse"];
+                };
+            };
+        };
+    };
+    merge_similar_apply_api_bulk_merge_similar_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-Sent Events, one frame per item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeItemEvent"] | components["schemas"]["BulkAppliedEvent"] | components["schemas"]["BulkFailedEvent"] | components["schemas"]["BulkRevertedEvent"] | components["schemas"]["MergeSummaryEvent"] | components["schemas"]["BulkErrorEvent"];
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_similar_diff_api_bulk_merge_similar_diff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeSimilarRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-Sent Events, one frame per item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeItemEvent"] | components["schemas"]["BulkAppliedEvent"] | components["schemas"]["BulkFailedEvent"] | components["schemas"]["BulkRevertedEvent"] | components["schemas"]["MergeSummaryEvent"] | components["schemas"]["BulkErrorEvent"];
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_merge_jobs_api_bulk_merge_similar_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeJobListResponse"];
+                };
+            };
+        };
+    };
+    merge_similar_preview_api_bulk_merge_similar_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SimilarityPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarityPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_all_tags_apply_api_bulk_remove_all_tags_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-Sent Events, one frame per item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearItemEvent"] | components["schemas"]["BulkAppliedEvent"] | components["schemas"]["BulkFailedEvent"] | components["schemas"]["BulkRevertedEvent"] | components["schemas"]["ClearSummaryEvent"] | components["schemas"]["BulkErrorEvent"];
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_all_tags_diff_api_bulk_remove_all_tags_diff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveAllTagsRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-Sent Events, one frame per item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearItemEvent"] | components["schemas"]["BulkAppliedEvent"] | components["schemas"]["BulkFailedEvent"] | components["schemas"]["BulkRevertedEvent"] | components["schemas"]["ClearSummaryEvent"] | components["schemas"]["BulkErrorEvent"];
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_clear_jobs_api_bulk_remove_all_tags_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearJobListResponse"];
                 };
             };
         };

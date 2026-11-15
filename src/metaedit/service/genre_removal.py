@@ -151,7 +151,7 @@ def plan_for_item(
         candidate=Candidate(kind=item.kind, name=item.name),
         # Not a Last.fm match, so there is no match to score. A perfect score here would
         # be a lie that the UI would render as a green "auto" badge.
-        confidence=_operator_confidence(),
+        confidence=operator_confidence(),
         mapping=mapping,
         locked_fields=item.get("LockedFields") or [],
     )
@@ -194,7 +194,7 @@ def _policy_for(outcome: RemovalOutcome, *, decompose: bool) -> FieldPolicy:
     )
 
 
-def _operator_confidence() -> Confidence:
+def operator_confidence() -> Confidence:
     """The confidence recorded for an operator-driven change.
 
     ``verdict="auto"``, and that is not a claim about match quality -- it is what makes the
@@ -206,14 +206,18 @@ def _operator_confidence() -> Confidence:
     entity" -- does not apply, because nothing was matched. The operator named the value
     and the field; their instruction is the authority, which is exactly what "auto" means
     for this plan. ``notes`` says so, so a UI showing the verdict has the context.
+
+    Public because every operator-driven batch uses it -- the single-genre removal, the
+    clear-everything batch and the similarity merge -- and three copies of one note would
+    be three chances for the note to stop being true.
     """
     return Confidence(
         total=1.0,
         verdict="auto",
         components=[],
         notes=[
-            "Operator-specified removal: no Last.fm candidate is involved, so no match was "
-            "scored. The named genre and field are the operator's explicit instruction."
+            "Operator-specified change: no Last.fm candidate is involved, so no match was "
+            "scored. The named value and field are the operator's explicit instruction."
         ],
     )
 
@@ -579,7 +583,7 @@ async def build_job(
                     item_id=getattr(dto, "Id", "") or "",
                     name=getattr(dto, "Name", "") or "",
                     kind=getattr(dto, "Type", "") or "",
-                    plan=_placeholder_plan(dto),
+                    plan=placeholder_plan(dto),
                     skipped_reason=f"could not read this item: {type(exc).__name__}",
                 )
             )
@@ -621,8 +625,13 @@ async def stream_job_diff(job: RemovalJob) -> AsyncIterator[dict[str, Any]]:
     yield {"type": "summary", **job.summary(), "emptied": job.emptied}
 
 
-def _placeholder_plan(dto: Any) -> DiffPlan:
-    """A plan-shaped placeholder for an unreadable item, so the event shape is stable."""
+def placeholder_plan(dto: Any) -> DiffPlan:
+    """A plan-shaped placeholder for an unreadable item, so the event shape is stable.
+
+    Public for the same reason ``operator_confidence`` is: every operator-driven batch has
+    to report an item it could not read without changing the event shape, and one helper
+    keeps those frames identical.
+    """
     from metaedit.domain.writable import ItemKind
 
     kind: ItemKind = (
@@ -633,7 +642,7 @@ def _placeholder_plan(dto: Any) -> DiffPlan:
         kind=kind,
         item_name=getattr(dto, "Name", "") or "",
         candidate=Candidate(kind=kind, name=getattr(dto, "Name", "") or ""),
-        confidence=_operator_confidence(),
+        confidence=operator_confidence(),
         mapping=MappingResult(),
     )
 
@@ -679,6 +688,8 @@ __all__ = [
     "build_job",
     "find_items",
     "get_removal_job_or_404",
+    "operator_confidence",
+    "placeholder_plan",
     "plan_for_item",
     "removal_registry",
     "stream_job_diff",

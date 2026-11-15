@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # ---- Last.fm ---------------------------------------------------------
     lastfm_api_key: SecretStr = Field(default=SecretStr(""), alias="LASTFM_API_KEY")
     lastfm_api_root: str = LASTFM_API_ROOT
-    lastfm_user_agent: str = "metaedit/0.2.2 (+https://github.com/sredevopsorg/metaedit)"
+    lastfm_user_agent: str = "metaedit/0.3.0 (+https://github.com/sredevopsorg/metaedit)"
     lastfm_timeout_s: float = 10.0
     lastfm_max_rps: float = 4.0
     lastfm_burst: int = 8
@@ -76,8 +76,17 @@ class Settings(BaseSettings):
 
     # ---- Mapping policy --------------------------------------------------
     lastfm_min_tag_count: int = 0
+    # How many ranked tags are promoted into ``Genres`` and into ``Tags`` (the style
+    # bucket; ADR 0006). Both are the *default* the API uses when a request does not say
+    # otherwise -- a request body may still ask for more, because the import path and a
+    # cautious single-item edit want different answers.
+    #
+    # These were declared and read by nothing until 0.3.0: the API carried its own
+    # hard-coded defaults, so setting either variable silently did nothing. Anything that
+    # needs the default limit must go through ``Settings.tag_policy_defaults`` rather than
+    # repeating the number, or the two will drift apart again.
     lastfm_genre_limit: int = 5
-    lastfm_style_limit: int = 10
+    lastfm_style_limit: int = 5
     max_tags_per_item: int = 30
     max_tag_length: int = 100
     # Comma-separated; parsed by the tag policy as the blacklist.
@@ -155,6 +164,17 @@ class Settings(BaseSettings):
             return frozenset()
         parts = (p.strip().lower() for p in self.tag_blacklist_extra.split(","))
         return frozenset(p for p in parts if p)
+
+    @property
+    def tag_policy_defaults(self) -> tuple[int, int]:
+        """``(genre_limit, style_limit)`` as the API should default them.
+
+        A single accessor rather than two attribute reads at each call site, so a request
+        that omits ``tag_policy`` cannot end up with one limit from configuration and the
+        other from a literal. Returns a tuple because the two are always used together and
+        an accidentally transposed pair would be a bug nobody notices for weeks.
+        """
+        return (self.lastfm_genre_limit, self.lastfm_style_limit)
 
     def jellyfin_key(self) -> str:
         return self.jellyfin_api_key.get_secret_value()

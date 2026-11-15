@@ -130,10 +130,17 @@ class TagOutcome:
 
 @dataclass(frozen=True, slots=True)
 class TagPolicy:
-    """How to turn a tag list into genres and tags."""
+    """How to turn a tag list into genres and tags.
+
+    ``genre_limit``/``style_limit`` default to 5 and 5. They are the *fallback* for code
+    with no configuration to consult; the API passes the configured values explicitly
+    (``Settings.tag_policy_defaults``), so ``LASTFM_GENRE_LIMIT``/``LASTFM_STYLE_LIMIT``
+    reach a plan. Before 0.3.0 these were 5 and 10 here and in config, and the config
+    values were read by nothing at all.
+    """
 
     genre_limit: int = 5
-    style_limit: int = 10
+    style_limit: int = 5
     # Tags below this popularity are ignored. Zero means "keep everything ranked",
     # so the behaviour is opt-in rather than a surprising default.
     min_count: int = 0
