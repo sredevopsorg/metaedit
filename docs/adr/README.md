@@ -24,3 +24,4 @@ A record is superseded by a new one (status change), never rewritten.
 | [0016](0016-operator-policy-in-the-database.md) | Operator policy is stored in the database, not only in the environment | Accepted |
 | [0017](0017-facet-filters-and-exclusion-patterns.md) | Facet filters are id-validated; exclusion patterns are literal globs | Accepted |
 | [0018](0018-similarity-merge-is-a-preview.md) | Similarity merging is a preview the operator confirms, never an automatic rewrite | Accepted |
+| [0019](0019-deployment-pulls-a-published-image.md) | Deployment pulls a published image; development builds from source | Accepted |

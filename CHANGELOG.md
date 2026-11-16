@@ -9,6 +9,38 @@ The version is `0.x`, which by SemVer means the interface may still change betwe
 releases. The metadata *contract* is the exception: what is written to Jellyfin is
 specified by ADRs 0003, 0004 and 0007 and those guarantees are treated as stable.
 
+## [Unreleased]
+
+### Added
+
+- **`docker-compose.yml` runs the published image instead of building it.** The stack
+  now pulls `ghcr.io/sredevopsorg/metaedit` — an image already built for `linux/amd64`
+  and `linux/arm64`, so it starts in seconds rather than compiling a Python image from
+  the checkout. `METAEDIT_IMAGE` selects the tag and defaults to `main`; pin a release
+  tag (`:0.3.0`, `:latest`) for a deployment that should not move on its own.
+- **`docker-compose.dev.yml`** for development: the same services, built from the
+  source tree. Its logs default to plain text rather than JSON.
+- `docs/adr/0019` records the split and why the two files exist instead of a flag.
+
+### Changed
+
+- **Upgrading is now `docker compose pull && docker compose up -d`.** The `migrate`
+  service runs the same pinned image as `app`, so nothing can drift between the
+  migration and the process it prepares for.
+- The README quickstart no longer asks for a `git clone`; it needs only the compose
+  file and a `.env`.
+- CI's deployment check builds explicitly with `--target runtime` and starts the stack
+  through `docker-compose.dev.yml`, since the deployment file now pulls.
+
+### Fixed
+
+- **The published image never started the server.** Docker builds the last stage when
+  no `--target` is given, and the multi-arch publish job gives none — the last stage
+  was the e2e `seed` fixtures, so the image ran the seeding script, exited and failed
+  its own health check. A `release` stage now sits last as the declared default, and CI
+  asserts the default target starts uvicorn. Registry images built before this fix are
+  affected; they fail immediately rather than misbehaving quietly.
+
 ## [0.3.0] - 2026-11-15
 
 ### Added

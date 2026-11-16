@@ -1,4 +1,25 @@
+# Deployment stack: runs published images, builds nothing.
+#
+#   docker compose up -d
+#
+# This file is for running metaedit, not for changing it. It pulls the app image
+# from GHCR and builds nothing at all -- there is no `build:` key here on
+# purpose, so `docker compose up` cannot silently fall back to compiling the
+# local checkout. Working on the code? Use docker-compose.dev.yml.
+#
+# Which image you get:
+#
+#   METAEDIT_IMAGE=ghcr.io/sredevopsorg/metaedit:main    (default)
+#
+# `main` tracks the unreleased edge; it is rebuilt on every push that changes
+# the image. For a fixed version pin a release tag instead, e.g. :0.3.0 or
+# :latest. See docs/operations.md for what each tag means and why `latest`
+# only moves on a release.
+
 name: metaedit
+
+x-app-image: &app-image
+  image: ${METAEDIT_IMAGE:-ghcr.io/sredevopsorg/metaedit:main}
 
 services:
   postgres:
@@ -35,11 +56,10 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
 
   # Forward-only migrations run as their own idempotent step, never implicitly
-  # at application startup on every replica.
+  # at application startup on every replica. It runs the same published image,
+  # with alembic instead of uvicorn as the command.
   migrate:
-    build:
-      context: .
-      target: runtime
+    <<: *app-image
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,9 +69,9 @@ services:
     restart: "no"
 
   app:
-    build:
-      context: .
-      target: runtime
+    <<: *app-image
+    # The app only starts once migrations have succeeded, so a failed migration
+    # leaves the old container running rather than a half-migrated one serving.
     restart: unless-stopped
     depends_on:
       postgres:
@@ -63,7 +83,9 @@ services:
       JELLYFIN_URL: ${JELLYFIN_URL:-http://host.docker.internal:8096}
       JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
       LASTFM_API_KEY: ${LASTFM_API_KEY:-}
-      LASTFM_USER_AGENT: ${LASTFM_USER_AGENT:-metaedit/0.3.0}
+      # Empty means "use the app's built-in default", which carries the project
+      # URL and version. Pinning a version here would drift from the image.
+      LASTFM_USER_AGENT: ${LASTFM_USER_AGENT:-}
       ARCHIVE_SOFT_CAP_BYTES: ${ARCHIVE_SOFT_CAP_BYTES:-104857600}
       LASTFM_MAX_RPS: ${LASTFM_MAX_RPS:-4}
       LOG_JSON: ${LOG_JSON:-true}

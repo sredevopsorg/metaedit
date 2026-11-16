@@ -40,12 +40,55 @@ uv venv --python 3.13
 uv sync --extra dev
 
 # Postgres only, then migrate
-docker compose up -d postgres
+docker compose -f docker-compose.dev.yml up -d postgres
 uv run alembic upgrade head
 uv run metaedit partitions          # pre-create monthly archive partitions
 
 uv run uvicorn metaedit.main:app --reload --port 8080
 ```
+
+### The two compose files
+
+There are two, and they differ in one way that matters: **where the image comes from.**
+
+| File | `app` / `migrate` | Use it for |
+|---|---|---|
+| `docker-compose.yml` | `image:` — pulls `ghcr.io/sredevopsorg/metaedit:${METAEDIT_IMAGE:-main}` | Running metaedit. What the [README quickstart](../README.md#quickstart) uses. |
+| `docker-compose.dev.yml` | `build:` — from this checkout | Changing the code |
+
+The deployment file has no `build:` key at all, so `docker compose up` cannot fall
+back to compiling a local checkout and quietly testing something other than what was
+released. The development file exists for the same reason in reverse: a developer's
+stack should never pull something they did not just edit.
+
+```bash
+# The whole stack from source, rebuilt on start
+docker compose -f docker-compose.dev.yml up -d --build
+
+# Follow up after a code change (recreates app; migrations re-run and are idempotent)
+docker compose -f docker-compose.dev.yml up -d --build app
+```
+
+They share a project name and the `pgdata` volume, deliberately: starting both at once
+would otherwise be a confusing port-and-volume collision rather than an obvious
+mistake. Down either with `docker compose -f <file> down`; add `-v` to drop the
+database.
+
+The development stack does not hot-reload. For a tight loop, run Postgres from it and
+the API natively (the `uv run uvicorn --reload` above) with Vite alongside.
+
+`docker-compose.e2e.yml` is a third, separate stack — see [end-to-end](#end-to-end).
+
+### The Dockerfile's default target
+
+Docker builds the **last** stage when no `--target` is given, and the multi-arch
+publish job gives none. That is why the last stage is `release` — a bookkeeping stage
+that changes nothing and inherits the server's command from `runtime`. The `seed` stage
+(the e2e fixtures) sits above it and is only ever built by name.
+
+This was a real defect, not a hypothetical: when `seed` was last, the published image
+started the seed script, exited, and failed its own health check. CI now asserts the
+default target's command starts uvicorn before anything is published.
 
 For SPA hot reload, run Vite separately — it proxies `/api` to the FastAPI
 process:
@@ -60,8 +103,9 @@ pnpm build        # typecheck + unit tests + vite build — what CI runs
 ```
 
 In a sandboxed environment pnpm may be unable to write its operation lock outside
-the workspace. Either build the SPA through Docker (`docker compose build app`),
-or redirect the store and XDG directories into the workspace:
+the workspace. Either build the SPA through Docker
+(`docker compose -f docker-compose.dev.yml build app`), or redirect the store and XDG
+directories into the workspace:
 
 ```bash
 cd apps/web
