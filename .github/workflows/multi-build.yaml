@@ -1,0 +1,263 @@
+# Multi-architecture image build, published to GHCR.
+#
+# Derived from sredevopsorg/multi-arch-docker-github-workflow. Each platform is
+# built natively -- amd64 on `ubuntu-latest`, arm64 on `ubuntu-24.04-arm` -- and
+# pushed by digest, then a second job stitches the digests into one manifest
+# list. No QEMU: emulated builds of a Python image are slow and subtly different
+# from the real thing.
+#
+# Tags:
+#   • a release tag (`v0.3.0`) also publishes `0.3.0`, `0.3` and `latest`
+#   • a push to `main` publishes `main` and `edge` only
+#
+# `latest` deliberately does NOT move on every `main` push. A `latest` that
+# follows unreleased commits means `docker pull ...:latest` silently gives you
+# code no release notes describe, and the only tag pointing at the approved
+# release is one you had to go and look up. `main` is where untagged work goes.
+name: Build multi-arch image
+
+on:
+  workflow_dispatch:
+  # Deliberately no `PR -> main` trigger: this job pushes to GHCR, so it must
+  # never run for a branch whose contents have not been approved. The `image`
+  # job in ci.yml already proves on every PR that the Dockerfile still builds
+  # and starts healthy; publishing is a separate, post-merge concern.
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    # Both lists are unions: a matching tag publishes even when only docs
+    # changed. A push to `main` that touches none of these paths does not
+    # rebuild the image at all.
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/multi-build.yaml"
+      # The image is more than its Dockerfile. Editing any of these changes what
+      # the container actually runs, and without them here a new release tag on
+      # a changed tree would publish the previous image.
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - "migrations/**"
+      - "alembic.ini"
+      - "apps/web/package.json"
+      - "apps/web/pnpm-lock.yaml"
+      - "apps/web/pnpm-workspace.yaml"
+      - "apps/web/vite.config.*"
+      - "apps/web/index.html"
+      - "apps/web/src/**"
+
+env:
+  # ghcr.io/<owner>/<repo>, lower-cased because registry paths are case-sensitive
+  # and a renamed repository would otherwise publish to a path nobody pulls.
+  IMAGE: ghcr.io/${{ github.repository }}
+
+permissions:
+  # Everything is opt-in here. The workflow only needs to read the repository and
+  # write the package; `attestations`/`id-token` are what let the build prove it
+  # produced the image it pushed.
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  # Scoped by ref, so a tag build and a `main` build never cancel each other.
+  group: multi-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    steps:
+      - name: Normalise the platform into an artifact-safe name
+        id: prepare
+        # Artifact names cannot contain '/'.
+        run: echo "platform_pair=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+
+      - name: Docker context
+        # A dedicated context keeps Buildx off the default one.
+        run: docker context create builders
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          endpoint: builders
+          platforms: ${{ matrix.platform }}
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          # No tag is applied here: the image is pushed as an untagged digest and
+          # only named by the merge job, once both platforms exist. That way the
+          # tag never points at a half-built image.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
+          # Scoped per platform so the two matrix legs never evict each other.
+          cache-from: type=gha,scope=${{ env.IMAGE }}-${{ env.platform_pair }}
+          cache-to: type=gha,scope=${{ env.IMAGE }}-${{ env.platform_pair }},mode=max
+
+      - name: Export the digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ env.platform_pair }}
+          path: /tmp/digests/*
+          # A build that produced no digest must fail loudly, not merge a list
+          # with an architecture missing from it.
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish the manifest list
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          # `#` comments are not stripped by the tag parser, so the comments
+          # that would normally explain these lines live above the block.
+          #
+          # On a release tag: v0.3.0 publishes 0.3.0, 0.3 and latest.
+          # On a push to main: `main` and `edge`, never `latest`.
+          # `latest` is driven by the semver entries themselves, which only
+          # resolve for tag refs, and by an explicit enabled raw tag.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+          labels: |
+            org.opencontainers.image.title=metaedit
+            org.opencontainers.image.description=Enrich your Jellyfin music library metadata using LastFM API
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      # `latest` moving is the one thing a release consumer relies on, so the
+      # release job spends a step proving the tag it is about to publish matches
+      # the version the tree actually declares. A stale bump would otherwise
+      # publish `0.2.2` to `latest` while every log said `0.3.0`.
+      - name: Tag matches the packaged version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          declared=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          echo "tag=${TAG#v} declared=${declared}"
+          if [ "${TAG#v}" != "$declared" ]; then
+            echo "::error::tag $TAG does not match pyproject.toml version $declared"
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: |
+            network=host
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push the manifest list
+        working-directory: /tmp/digests
+        env:
+          METADATA_JSON: ${{ steps.meta.outputs.json }}
+          # Repository values are passed through the environment rather than
+          # interpolated into the script. `${{ }}` inside `run:` is expanded by
+          # the runner before bash sees the line, so a crafted value becomes
+          # shell code; `$REPO_URL` below is just a string.
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        # The digest count is asserted because `imagetools create` given zero
+        # digests fails in a way that is easy to misread, and given one digest
+        # would quietly publish a single-architecture "multi-arch" tag.
+        run: |
+          set -euo pipefail
+          count=$(find . -maxdepth 1 -type f | wc -l)
+          echo "digests: $count"
+          [ "$count" -eq 2 ] || { echo "::error::expected 2 digests, found $count"; ls -la; exit 1; }
+
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$METADATA_JSON")
+          printf 'pushing: %s\n' "${tags[@]}"
+
+          args=()
+          for tag in "${tags[@]}"; do args+=(-t "$tag"); done
+
+          # The file NAMES are the digests, so they are collected without the
+          # `./` prefix `./*` would leave behind -- `${f#./}` strips it. The
+          # names are checksum hex written by the build job, not input.
+          refs=()
+          for f in ./*; do
+            refs+=("${IMAGE}@sha256:${f#./}")
+          done
+          printf ' → %s\n' "${refs[@]}"
+
+          docker buildx imagetools create "${args[@]}" \
+            --annotation "index:org.opencontainers.image.description=Enrich your Jellyfin music library metadata using LastFM API" \
+            --annotation "index:org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --annotation "index:org.opencontainers.image.url=${REPO_URL}" \
+            --annotation "index:org.opencontainers.image.source=${REPO_URL}" \
+            --annotation "index:org.opencontainers.image.revision=${REVISION}" \
+            "${refs[@]}"
+
+      - name: Verify both architectures are in the published manifest
+        # A failure after publish is worth failing on: it means consumers on one
+        # architecture get a pull error or an emulated fallback.
+        env:
+          IMAGE_REF: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          image="$IMAGE_REF"
+          echo "--- $image"
+          docker buildx imagetools inspect "$image"
+          platforms=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' | jq -r '.manifests[].platform | "\(.os)/\(.architecture)"')
+          echo "--- platforms: $platforms"
+          for want in linux/amd64 linux/arm64; do
+            grep -qx "$want" <<< "$platforms" || { echo "::error::$want missing from $image"; exit 1; }
+          done
