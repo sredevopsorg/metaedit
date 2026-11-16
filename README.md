@@ -86,7 +86,7 @@ METAEDIT_IMAGE=ghcr.io/sredevopsorg/metaedit:latest docker compose up -d
 
 | Tag | What it is | Rebuilt when |
 |---|---|---|
-| `0.3.0`, `0.3` | A fixed release. Use these for anything you care about. | Never |
+| `0.4.0`, `0.4` | A fixed release. Use these for anything you care about. | Never |
 | `latest` | The newest release | A release tag is pushed |
 | `main` | Unreleased edge | Every push to `main` that changes the image |
 

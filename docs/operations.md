@@ -159,7 +159,7 @@ The image is `ghcr.io/sredevopsorg/metaedit`, built for `linux/amd64` and
 
 | Tag | Source | Moves |
 |---|---|---|
-| `0.3.0`, `0.3` | A release tag `v0.3.0` | Never |
+| `0.4.0`, `0.4` | A release tag `v0.4.0` | Never |
 | `latest` | The newest release tag | Only on a release |
 | `main` | Every push to `main` that changes the image | Continuously |
 | `edge` | Same build as `main` | Continuously |

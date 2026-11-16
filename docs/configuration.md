@@ -18,7 +18,7 @@ the stack up; they shape the *deployment* rather than the app process.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `METAEDIT_IMAGE` | `ghcr.io/sredevopsorg/metaedit:main` | The app image to run and to migrate with. Pin a release tag (`:0.3.0`, `:latest`) for a deployment that should not move on its own; `main` is rebuilt on every image-changing push. Ignored by `docker-compose.dev.yml`, which builds from source. |
+| `METAEDIT_IMAGE` | `ghcr.io/sredevopsorg/metaedit:main` | The app image to run and to migrate with. Pin a release tag (`:0.4.0`, `:latest`) for a deployment that should not move on its own; `main` is rebuilt on every image-changing push. Ignored by `docker-compose.dev.yml`, which builds from source. |
 | `APP_BIND` | `127.0.0.1` | Host address the app port is published on. Loopback on purpose — see the security note below. |
 | `APP_PORT` | `8080` | Host port for the app. The container always listens on 8080. |
 | `POSTGRES_USER` | `metaedit` | Postgres superuser name, also the database owner. |
@@ -62,7 +62,7 @@ Logs go to **stderr** — the CLI keeps stdout parseable for its JSON reports.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LASTFM_API_KEY` | *(empty)* | API key. Read-only usage: no user auth, no session signing, nothing is ever written back to Last.fm. |
-| `LASTFM_USER_AGENT` | `metaedit/0.2.0 (+https://github.com/sredevopsorg/metaedit)` | Identification Last.fm asks for. Leave the line out entirely for the default; a *set-but-empty* value sends no User-Agent, which Last.fm may treat as abusive. |
+| `LASTFM_USER_AGENT` | `metaedit/0.4.0 (+https://github.com/sredevopsorg/metaedit)` | Identification Last.fm asks for. Leave the line out entirely for the default; a *set-but-empty* value sends no User-Agent, which Last.fm may treat as abusive. |
 | `LASTFM_TIMEOUT_S` | `10.0` | Per-request timeout, seconds. |
 | `LASTFM_MAX_RPS` | `4.0` | Shared client-side rate limit, requests per second. |
 | `LASTFM_BURST` | `8` | Burst allowance for the rate limiter. |
