@@ -179,14 +179,34 @@ jobs:
       # `latest` moving is the one thing a release consumer relies on, so the
       # release job spends a step proving the tag it is about to publish matches
       # the version the tree actually declares. A stale bump would otherwise
-      # publish `0.2.2` to `latest` while every log said `0.3.0`.
+      # publish a mislabelled image to `latest`.
+      #
+      # The declared version is fetched from the tagged commit over the API
+      # because this job has no workspace: `needs: build` is satisfied by
+      # artifacts only, and the earlier version of this step read a
+      # pyproject.toml that was never checked out. The grep then failed, the
+      # variable came back empty, and the comparison failed the release -- safe,
+      # but for the wrong reason and impossible to diagnose from the log.
       - name: Tag matches the packaged version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          declared=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          # `--ref` pins the read to the tagged commit, not the default branch.
+          encoded=$(gh api "repos/$REPO/contents/pyproject.toml?ref=$SHA" --jq .content)
+          declared=$(printf '%s' "$encoded" | base64 -d | sed -n 's/^version = "\(.*\)"$/\1/p' | head -1)
+
+          # An unreadable version is a failure, never a pass with an empty value:
+          # a silent empty would make the comparison below trivially wrong.
+          if [ -z "$declared" ]; then
+            echo "::error::could not read version from pyproject.toml at $SHA"
+            exit 1
+          fi
+
           echo "tag=${TAG#v} declared=${declared}"
           if [ "${TAG#v}" != "$declared" ]; then
             echo "::error::tag $TAG does not match pyproject.toml version $declared"
