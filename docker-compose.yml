@@ -12,7 +12,7 @@
 #   METAEDIT_IMAGE=ghcr.io/sredevopsorg/metaedit:main    (default)
 #
 # `main` tracks the unreleased edge; it is rebuilt on every push that changes
-# the image. For a fixed version pin a release tag instead, e.g. :0.3.0 or
+# the image. For a fixed version pin a release tag instead, e.g. :0.4.0 or
 # :latest. See docs/operations.md for what each tag means and why `latest`
 # only moves on a release.
 
