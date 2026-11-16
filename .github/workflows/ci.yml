@@ -158,15 +158,37 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # `--target runtime` is not optional. Without it Docker builds the LAST
+      # stage, which is the e2e seed, and CI would happily verify an image that
+      # starts a seeding script instead of the server.
       - name: Build
-        run: docker build -t metaedit:ci .
+        run: docker build --target runtime -t metaedit:ci .
+
+      # Assert the default target is the same thing, because the publish
+      # workflow builds with no `--target`. If `release` were ever removed or a
+      # stage added below it, this is what would catch it before a broken image
+      # reached the registry.
+      - name: Default build target serves the app
+        run: |
+          set -euo pipefail
+          docker build -t metaedit:default-target .
+          cmd=$(docker image inspect metaedit:default-target --format '{{json .Config.Cmd}}')
+          echo "default target CMD: $cmd"
+          case "$cmd" in
+            *uvicorn*) ;;
+            *) echo "::error::default target does not start the server: $cmd"; exit 1 ;;
+          esac
 
       - name: Start the stack and wait for health
-        # Verifies the real deployment path, not just that the image compiles:
+        # Uses the development compose file: it builds from this checkout. The
+        # deployment file pulls the published image, so verifying it here would
+        # test the registry rather than the commit under review.
+        #
+        # The dev stack already defaults to plain logs, so no override is needed.
         # migrations run as their own service, and the app must pass its own
         # HEALTHCHECK, which is dependency-free by design.
         run: |
-          docker compose up -d --wait --wait-timeout 180
+          docker compose -f docker-compose.dev.yml up -d --build --wait --wait-timeout 180
 
       - name: Probe the API
         # `set -e` plus `grep -q` is the assertion: a missing or wrong value fails
@@ -188,8 +210,8 @@ jobs:
 
       - name: Container logs
         if: failure()
-        run: docker compose logs --no-color --tail 200
+        run: docker compose -f docker-compose.dev.yml logs --no-color --tail 200
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.dev.yml down -v

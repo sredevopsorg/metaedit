@@ -73,9 +73,24 @@ CMD ["uvicorn", "metaedit.main:app", "--host", "0.0.0.0", "--port", "8080", "--n
 # code. It exists because the e2e seed needs the app's own package to write through the
 # real archive, and mounting the script from the host made it unreadable to the
 # unprivileged user the image runs as.
+#
+# This must stay the LAST stage in the file. Docker's default target is the final
+# stage, and the multi-arch publish job builds without naming one -- so a built image
+# runs whatever this stage runs. When `seed` was last, `ghcr.io/.../metaedit:main`
+# started the seed script instead of the server and failed its own health check.
 # ---------------------------------------------------------------------------
 FROM runtime AS seed
 
 COPY --chown=10001:10001 tests/e2e/seed_archive.py /app/seed_archive.py
 
 CMD ["python", "/app/seed_archive.py"]
+
+# ---------------------------------------------------------------------------
+# Stage 5: unbreakable default target
+#
+# The publish pipeline builds with no `--target`. Rather than rely on reading
+# order to decide what gets shipped, the default target is declared: packaging
+# bookkeeping only, no filesystem changes. Anything added below this line
+# silently changes what the registry serves.
+# ---------------------------------------------------------------------------
+FROM runtime AS release

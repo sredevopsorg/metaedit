@@ -1,0 +1,93 @@
+# Development stack: builds the image from this checkout, on every start.
+#
+#   docker compose -f docker-compose.dev.yml up -d --build
+#
+# For changing the code. Everything is identical to the deployment stack except
+# that `app` and `migrate` are built from the local Dockerfile instead of pulled
+# from GHCR, so an edit is reflected by rebuilding rather than by waiting for a
+# release.
+#
+# Not included: source hot reload. A Python edit still needs a rebuild. For the
+# tightest loop run Postgres here and the API natively (`uv run uvicorn
+# --reload`) with Vite separately -- docs/development.md has that setup.
+#
+# This file deliberately shares its project name with docker-compose.yml so the
+# two cannot be started side by side by accident: they would fight for the same
+# ports and, worse, the same `pgdata` volume with two different definitions.
+
+name: metaedit
+
+x-app-build: &app-build
+  build:
+    context: .
+    target: runtime
+
+services:
+  postgres:
+    image: docker.io/postgres:18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-metaedit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-metaedit}
+      POSTGRES_DB: ${POSTGRES_DB:-metaedit}
+      # Deterministic initdb so collation cannot drift under the archive.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=icu --icu-locale=en-US"
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-metaedit} -d ${POSTGRES_DB:-metaedit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  migrate:
+    <<: *app-build
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-metaedit}:${POSTGRES_PASSWORD:-metaedit}@postgres:5432/${POSTGRES_DB:-metaedit}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  app:
+    <<: *app-build
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-metaedit}:${POSTGRES_PASSWORD:-metaedit}@postgres:5432/${POSTGRES_DB:-metaedit}
+      JELLYFIN_URL: ${JELLYFIN_URL:-http://host.docker.internal:8096}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
+      LASTFM_API_KEY: ${LASTFM_API_KEY:-}
+      LASTFM_USER_AGENT: ${LASTFM_USER_AGENT:-}
+      ARCHIVE_SOFT_CAP_BYTES: ${ARCHIVE_SOFT_CAP_BYTES:-104857600}
+      LASTFM_MAX_RPS: ${LASTFM_MAX_RPS:-4}
+      # Logs default to human-readable here, not JSON: this stack is watched by
+      # a person in a terminal, not collected by an agent.
+      LOG_JSON: ${LOG_JSON:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WEB_DIST_DIR: /app/web
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:

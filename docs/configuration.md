@@ -18,6 +18,7 @@ the stack up; they shape the *deployment* rather than the app process.
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `METAEDIT_IMAGE` | `ghcr.io/sredevopsorg/metaedit:main` | The app image to run and to migrate with. Pin a release tag (`:0.3.0`, `:latest`) for a deployment that should not move on its own; `main` is rebuilt on every image-changing push. Ignored by `docker-compose.dev.yml`, which builds from source. |
 | `APP_BIND` | `127.0.0.1` | Host address the app port is published on. Loopback on purpose — see the security note below. |
 | `APP_PORT` | `8080` | Host port for the app. The container always listens on 8080. |
 | `POSTGRES_USER` | `metaedit` | Postgres superuser name, also the database owner. |
@@ -30,6 +31,10 @@ The compose file also passes `JELLYFIN_URL`, `JELLYFIN_API_KEY`, `LASTFM_API_KEY
 `LOG_JSON` through to the app container; their meaning is in the app tables below. A
 `migrate` one-shot service runs `alembic upgrade head` before the app starts, so
 migrations never run implicitly at application startup.
+
+The development file ([`docker-compose.dev.yml`](../docker-compose.dev.yml)) reads the
+same variables, except `METAEDIT_IMAGE`, and changes one default: `LOG_JSON` is `false`
+there, because that stack is read by a person rather than collected by an agent.
 
 ## App: HTTP server and logging
 

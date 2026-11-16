@@ -136,7 +136,46 @@ each one is a trap that a future change could walk back into:
 - `album.getInfo` returns **no `releasedate`**, by name or by MBID, so album years
   cannot be sourced from it. The column is retained for tolerance and stays null.
 
+## Upgrading
+
+The stack runs published images, so upgrading is a pull and a recreate:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+That is safe in the order shown because the `migrate` service runs first and the app
+only starts once it has exited successfully — a failed migration leaves the *old*
+container running rather than a half-migrated one serving traffic. Migrations are
+forward-only, so downgrading is not `docker compose`'s to solve: to go back you point
+`METAEDIT_IMAGE` at the older tag and restore the database from a backup taken before
+the upgrade.
+
+### The image and its tags
+
+The image is `ghcr.io/sredevopsorg/metaedit`, built for `linux/amd64` and
+`linux/arm64` by [`.github/workflows/multi-build.yaml`](../.github/workflows/multi-build.yaml).
+
+| Tag | Source | Moves |
+|---|---|---|
+| `0.3.0`, `0.3` | A release tag `v0.3.0` | Never |
+| `latest` | The newest release tag | Only on a release |
+| `main` | Every push to `main` that changes the image | Continuously |
+| `edge` | Same build as `main` | Continuously |
+
+`latest` deliberately does **not** follow `main`. A `latest` that tracks merged but
+unreleased commits means a pull silently returns code that no changelog describes.
+`main` is where untagged work goes; `latest` is what has been released.
+
+For anything you care about, set `METAEDIT_IMAGE` to a version tag. Otherwise `docker
+compose pull` on a different day quietly installs different code.
+
+A release tag whose name does not match the `version` in `pyproject.toml` fails the
+publish job rather than shipping a mislabelled image.
+
 ## Operations notes
+
 
 - The app port is bound to `127.0.0.1` by default: it holds an administrator Jellyfin
   key and has no authentication of its own. Put an authenticating proxy in front of it

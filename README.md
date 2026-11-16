@@ -62,25 +62,50 @@ server, and a Last.fm API key:
 | **Last.fm API key** | From <https://www.last.fm/api/account/create>. Read-only usage — no user auth. |
 | **Postgres 18** | Runs in the compose stack; required for the archive's declarative monthly partitioning. |
 
-```bash
-git clone https://github.com/sredevopsorg/metaedit.git
-cd metaedit
+The release is a published image, so running it needs no checkout and no build
+toolchain — only the compose file and a `.env`:
 
-cp .env.example .env
+```bash
+mkdir metaedit && cd metaedit
+curl -fsSLO https://raw.githubusercontent.com/sredevopsorg/metaedit/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/sredevopsorg/metaedit/main/.env.example -o .env
 # edit .env: JELLYFIN_URL, JELLYFIN_API_KEY, LASTFM_API_KEY, POSTGRES_PASSWORD
 
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then open <http://127.0.0.1:8080>.
+
+The app image is pulled from `ghcr.io/sredevopsorg/metaedit`. The default tag is
+`main` (the current edge); a deployment that should not move on its own should pin
+a release instead:
+
+```bash
+METAEDIT_IMAGE=ghcr.io/sredevopsorg/metaedit:latest docker compose up -d
+```
+
+| Tag | What it is | Rebuilt when |
+|---|---|---|
+| `0.3.0`, `0.3` | A fixed release. Use these for anything you care about. | Never |
+| `latest` | The newest release | A release tag is pushed |
+| `main` | Unreleased edge | Every push to `main` that changes the image |
+
+> **`main` moves under you.** `docker compose pull && docker compose up -d`
+> upgrades to whatever is on `main` at that moment. Pin a version tag if you would
+> rather choose when that happens.
+
+Working on the code rather than running it? See [development](docs/development.md)
+and the checked-in `docker-compose.dev.yml`, which builds from the source instead.
 
 > **The app binds to `127.0.0.1` on purpose.** It holds an administrator Jellyfin key
 > and has no authentication of its own. Put an authenticating proxy in front of it
 > before exposing it anywhere.
 
 The stack runs Postgres, applies migrations as a one-shot `migrate` service, and only
-then starts the app. The first visit is the Library screen: search for something, open
-an item, fetch its Last.fm candidates, and review the diff.
+then starts the app. Both `app` and `migrate` run the same published image — migrations
+are the same binary with a different command — so there is nothing to build and nothing
+that can drift between the two. The first visit is the Library screen: search for
+something, open an item, fetch its Last.fm candidates, and review the diff.
 
 Every knob the app reads is listed with its default in the
 [configuration reference](docs/configuration.md); `.env.example` is the template to copy
