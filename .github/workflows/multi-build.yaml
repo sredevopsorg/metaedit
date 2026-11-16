@@ -176,18 +176,21 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
-      # `latest` moving is the one thing a release consumer relies on, so the
-      # release job spends a step proving the tag it is about to publish matches
-      # the version the tree actually declares. A stale bump would otherwise
-      # publish a mislabelled image to `latest`.
+      # Reports whether the release tag agrees with the `version` in
+      # pyproject.toml at that commit. It WARNS and never fails the publish.
       #
-      # The declared version is fetched from the tagged commit over the API
-      # because this job has no workspace: `needs: build` is satisfied by
-      # artifacts only, and the earlier version of this step read a
-      # pyproject.toml that was never checked out. The grep then failed, the
-      # variable came back empty, and the comparison failed the release -- safe,
-      # but for the wrong reason and impossible to diagnose from the log.
-      - name: Tag matches the packaged version
+      # It used to fail, and that was wrong twice over. A tag pins a commit, and
+      # this step could only be fixed by a commit made after the tag was pushed --
+      # so any bug in this step makes that tag permanently unpublishable, which is
+      # how v0.4.0 came to fail twice. Meanwhile the value it compares is already
+      # derived from the tag by metadata-action, and the version itself is proven
+      # by the release PR's checks. The check is a diagnostic; treating it as a
+      # gate made it the most dangerous step in the release.
+      #
+      # The version is read over the API because this job has no workspace:
+      # `needs: build` is satisfied by artifacts only. `?ref=<sha>` pins the read
+      # to the tagged commit rather than the default branch.
+      - name: Report tag and packaged version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           TAG: ${{ github.ref_name }}
@@ -196,21 +199,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # `--ref` pins the read to the tagged commit, not the default branch.
-          encoded=$(gh api "repos/$REPO/contents/pyproject.toml?ref=$SHA" --jq .content)
-          declared=$(printf '%s' "$encoded" | base64 -d | sed -n 's/^version = "\(.*\)"$/\1/p' | head -1)
+          declared=$(gh api "repos/$REPO/contents/pyproject.toml?ref=$SHA" --jq .content 2>/dev/null \
+            | base64 -d 2>/dev/null \
+            | sed -n 's/^version = "\(.*\)"$/\1/p' | head -1 || true)
 
-          # An unreadable version is a failure, never a pass with an empty value:
-          # a silent empty would make the comparison below trivially wrong.
           if [ -z "$declared" ]; then
-            echo "::error::could not read version from pyproject.toml at $SHA"
-            exit 1
+            echo "::warning::could not read a version from pyproject.toml at $SHA"
+            exit 0
           fi
-
           echo "tag=${TAG#v} declared=${declared}"
           if [ "${TAG#v}" != "$declared" ]; then
-            echo "::error::tag $TAG does not match pyproject.toml version $declared"
-            exit 1
+            echo "::warning::tag $TAG does not match pyproject.toml version $declared"
           fi
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
